@@ -30,7 +30,7 @@ dependencies {
 
     // EMI
     compileOnly fg.deobf("dev.emi:emi-forge:${emi_version}:api")
-    implementation fg.deobf("dev.emi:emi-forge:${emi_version}")
+    compileOnly fg.deobf("dev.emi:emi-forge:${emi_version}")
 
     // Geckolib
     implementation fg.deobf("software.bernie.geckolib:geckolib-forge-${minecraft_version}:${geckolib_version}")

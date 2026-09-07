@@ -36,6 +36,8 @@ public class TransferProxyRecipeEvent extends RecipeTypeEvent {
     public final ResourceLocation proxyRecipeId;
     @GraphParameterGet
     public final Recipe<?> proxyRecipe;
+    @GraphParameterGet
+    public final int traversal;
     @Nullable
     @GraphParameterSet(identity = "drops.out")
     public MBDRecipe mbdRecipe;
@@ -48,16 +50,35 @@ public class TransferProxyRecipeEvent extends RecipeTypeEvent {
      * @param proxyType     external recipe type
      * @param proxyRecipeId external recipe id
      * @param proxyRecipe   original external recipe instance
+     * @param traversal     one-based proxy traversal number
      * @param mbdRecipe     initially converted recipe, or {@code null} when the
      *                      default converter produced no recipe
      */
-    public TransferProxyRecipeEvent(MBDRecipeType recipeType, ResourceLocation proxyTypeId, RecipeType<?> proxyType, ResourceLocation proxyRecipeId, Recipe<?> proxyRecipe, @Nullable MBDRecipe mbdRecipe) {
+    public TransferProxyRecipeEvent(MBDRecipeType recipeType, ResourceLocation proxyTypeId, RecipeType<?> proxyType,
+                                    ResourceLocation proxyRecipeId, Recipe<?> proxyRecipe, int traversal,
+                                    @Nullable MBDRecipe mbdRecipe) {
         super(recipeType);
+        if (traversal < 1) {
+            throw new IllegalArgumentException("Proxy recipe traversal must be at least 1");
+        }
         this.proxyTypeId = proxyTypeId;
         this.proxyType = proxyType;
         this.proxyRecipe = proxyRecipe;
         this.proxyRecipeId = proxyRecipeId;
+        this.traversal = traversal;
         this.mbdRecipe = mbdRecipe;
+    }
+
+    /**
+     * Creates a first-traversal proxy-transfer event.
+     *
+     * @deprecated use the constructor that explicitly supplies the traversal
+     * number so listeners can be routed by {@code source_type@traversal}
+     */
+    @Deprecated
+    public TransferProxyRecipeEvent(MBDRecipeType recipeType, ResourceLocation proxyTypeId, RecipeType<?> proxyType,
+                                    ResourceLocation proxyRecipeId, Recipe<?> proxyRecipe, @Nullable MBDRecipe mbdRecipe) {
+        this(recipeType, proxyTypeId, proxyType, proxyRecipeId, proxyRecipe, 1, mbdRecipe);
     }
 
     /**

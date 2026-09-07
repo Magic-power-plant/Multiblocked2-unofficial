@@ -476,6 +476,8 @@
 
     "recipe_type.registry_name": "レジストリ名",
     "recipe_type.registry_name.tooltip": "レジストリ名は一意でなければなりません。",
+    "recipe_type.display_name": "表示名",
+    "recipe_type.display_name.tooltip": "レシピタイプにローカライズ名がない場合に使用します。",
     "recipe_type.require_fuel": "燃料が必要",
     "recipe_type.require_fuel.tooltip": "このレシピタイプが動作するために燃料を必要とするかどうか。trueの場合、燃料レシピも追加する必要があります。",
     "recipe_type.is_xei_visible": "XEIで表示",

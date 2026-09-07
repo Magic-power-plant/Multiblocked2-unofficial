@@ -689,6 +689,8 @@
   "editor.machine_scene.draw_rendering_box_frame_lines": "绘制渲染边界框线",
   "recipe_type.registry_name": "注册名称",
   "recipe_type.registry_name.tooltip": "注册名称必须是唯一的。",
+  "recipe_type.display_name": "展示名称",
+  "recipe_type.display_name.tooltip": "配方类型没有本地化名称时使用此名称。",
   "recipe_type.require_fuel": "需要燃料",
   "recipe_type.require_fuel.tooltip": "配方类型是否需要燃料才能工作。如果为 true，你还应该添加燃料配方。",
   "recipe_type.is_xei_visible": "在 XEI 中可见",

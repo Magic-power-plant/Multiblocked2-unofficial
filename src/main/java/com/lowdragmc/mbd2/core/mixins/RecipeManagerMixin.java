@@ -27,9 +27,9 @@ import java.util.Map;
 /**
  * Injects MBD2 built-in recipe types after vanilla datapack recipe loading.
  *
- * <p>The mixin copies the recipe map before handing it to each registered
- * {@link MBDRecipeType}, allowing recipe types to append generated recipes without mutating
- * the original immutable map implementation returned by vanilla reload code.</p>
+ * <p>The mixin copies the recipe map before handing the registered
+ * {@link MBDRecipeType} set to its fixed-point loader, allowing chained proxy
+ * recipes to be appended without mutating vanilla's immutable reload table.</p>
  */
 @Mixin(RecipeManager.class)
 public abstract class RecipeManagerMixin {
@@ -52,9 +52,7 @@ public abstract class RecipeManagerMixin {
         var mutableRecipes = new HashMap<RecipeType<?>, Map<ResourceLocation, Recipe<?>>>();
         recipes.forEach((type, recipesByName) -> mutableRecipes.put(type, new HashMap<>(recipesByName)));
         recipes = mutableRecipes;
-        for (var recipeType : MBDRegistries.RECIPE_TYPES) {
-            recipeType.onRecipeManagerLoaded(recipes);
-        }
+        MBDRecipeType.onRecipeManagerLoaded(recipes, MBDRegistries.RECIPE_TYPES.values());
         mbd2$replaceRecipeTables(mbd2$getLoadedRecipes());
     }
 

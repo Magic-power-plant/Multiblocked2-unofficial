@@ -13,6 +13,7 @@ import com.lowdragmc.lowdraglib.gui.texture.UIResourceTexture;
 import com.lowdragmc.lowdraglib.gui.widget.*;
 import com.lowdragmc.lowdraglib.jei.IngredientIO;
 import com.lowdragmc.lowdraglib.syncdata.ITagSerializable;
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib.utils.Size;
 import com.lowdragmc.mbd2.MBD2;
 import com.lowdragmc.mbd2.api.capability.recipe.IO;
@@ -90,12 +91,43 @@ public class MBDRecipeType implements RecipeType<MBDRecipe>, ITagSerializable<Co
         WidgetGroup create(MBDRecipe recipe);
     }
 
+    /**
+     * Determines how many times one target/source proxy relationship is
+     * converted during a recipe-manager load.
+     *
+     * <p>The policy is evaluated once for each receiving MBD recipe type and
+     * configured source recipe type pair. A value below one is normalized to
+     * one, so a configured proxy source is never silently skipped. KubeJS uses
+     * this capability to derive the count from
+     * {@code onTransferProxyRecipe("mbd_recipe_type", ...)} or
+     * {@code onTransferProxyRecipe("mbd_recipe_type@traversal", ...)}
+     * listeners.</p>
+     */
+    @FunctionalInterface
+    public interface ProxyRecipeTraversalPolicy {
+        ProxyRecipeTraversalPolicy SINGLE_PASS = (targetRecipeType, sourceRecipeType) -> 1;
+
+        /**
+         * Returns the requested number of conversion traversals for one target
+         * MBD recipe type and proxy source recipe type pair.
+         *
+         * @param targetRecipeType MBD recipe type receiving converted recipes
+         * @param sourceRecipeType configured proxy source type
+         * @return requested traversal count; values below one become one
+         */
+        int getTraversalCount(MBDRecipeType targetRecipeType, RecipeType<?> sourceRecipeType);
+    }
+
     @Configurable(name = "recipe_type.registry_name", tips = {
             "recipe_type.registry_name.tooltip",
             "config.require_restart"
     }, forceUpdate = false)
     @Getter
     private ResourceLocation registryName;
+    @Setter
+    @Configurable(name = "recipe_type.display_name", tips = "recipe_type.display_name.tooltip")
+    @Persisted
+    private String displayName = "";
     @Setter
     @Getter
     private MBDRecipeBuilder recipeBuilder;
@@ -163,6 +195,63 @@ public class MBDRecipeType implements RecipeType<MBDRecipe>, ITagSerializable<Co
     }
 
     /**
+     * Loads builtin and proxy recipes for one or more recipe types.
+     *
+     * <p>Proxy sources can themselves be MBD recipe types.  A single pass is
+     * order-dependent in that case: a type visited before its source type has
+     * been expanded cannot see the generated recipes.  This overload expands
+     * the complete set to a fixed point, while retaining source snapshots so
+     * recipe maps can safely be modified during the pass.</p>
+     *
+     * @param rawRecipes recipe-manager data keyed by recipe type and recipe id
+     * @param recipeTypes MBD recipe types to initialize and expand
+     */
+    public static void onRecipeManagerLoaded(
+            Map<RecipeType<?>, Map<ResourceLocation, Recipe<?>>> rawRecipes,
+            Iterable<? extends MBDRecipeType> recipeTypes) {
+        onRecipeManagerLoaded(rawRecipes, recipeTypes, ProxyRecipeTraversalPolicy.SINGLE_PASS);
+    }
+
+    /**
+     * Loads builtin and proxy recipes with a source-specific traversal policy.
+     *
+     * <p>Each traversal receives the same source recipe and is distinguished
+     * by the traversal number passed to {@link #toMBDrecipe(RecipeType,
+     * ResourceLocation, Recipe, int)}. Traversal counts are scoped to the
+     * receiving MBD type and source type, keeping independent proxy passes
+     * available while the surrounding fixed-point expansion continues to load
+     * chains of MBD recipe types.</p>
+     *
+     * @param rawRecipes recipe-manager data keyed by recipe type and recipe id
+     * @param recipeTypes MBD recipe types to initialize and expand
+     * @param traversalPolicy determines the number of passes for each target/source pair
+     */
+    public static void onRecipeManagerLoaded(
+            Map<RecipeType<?>, Map<ResourceLocation, Recipe<?>>> rawRecipes,
+            Iterable<? extends MBDRecipeType> recipeTypes,
+            ProxyRecipeTraversalPolicy traversalPolicy) {
+        Objects.requireNonNull(rawRecipes, "rawRecipes");
+        Objects.requireNonNull(traversalPolicy, "traversalPolicy");
+        var targets = snapshotRecipeTypes(recipeTypes);
+        if (targets.isEmpty()) return;
+
+        var context = new ProxyLoadContext(traversalPolicy);
+        for (var target : targets) {
+            target.proxyRecipes.clear();
+            var targetRecipes = rawRecipes.computeIfAbsent(target, type -> new HashMap<>());
+            target.builtinRecipes.values().forEach(recipe -> putRuntimeRecipe(targetRecipes, recipe));
+            for (var sourceType : target.uniqueProxyRecipeTypes()) {
+                target.proxyRecipes.put(sourceType, new ArrayList<>());
+            }
+        }
+
+        // Existing MBD recipes may have been inserted by another loader before
+        // this pass.  Their owner is enough to seed cycle detection.
+        context.seedMaps(rawRecipes.values());
+        expandProxyRecipes(rawRecipes, targets, context);
+    }
+
+    /**
      * Injects builtin recipes and rebuilds the proxy recipe cache after a recipe
      * manager reload.
      *
@@ -177,28 +266,54 @@ public class MBDRecipeType implements RecipeType<MBDRecipe>, ITagSerializable<Co
      * by recipe id
      */
     public void onRecipeManagerLoaded(Map<RecipeType<?>, Map<ResourceLocation, Recipe<?>>> rawRecipes) {
-        // append builtin recipes
-        var recipeTypeMap = rawRecipes.computeIfAbsent(this, type -> new HashMap<>());
-        builtinRecipes.values().forEach(recipe -> putRuntimeRecipe(recipeTypeMap, recipe));
+        onRecipeManagerLoaded(rawRecipes, List.of(this));
+    }
 
-        // load proxy recipes
-        proxyRecipes.clear();
-        for (var type : new LinkedHashSet<>(proxyRecipeTypes)) {
-            var sourceRecipeMap = rawRecipes.get(type);
-            if (sourceRecipeMap == null || sourceRecipeMap.isEmpty()) {
-                proxyRecipes.put(type, Collections.emptyList());
-                continue;
+    /**
+     * Loads builtin and proxy recipes into KubeJS' flat recipe map.
+     *
+     * <p>The KubeJS recipe event runs after scripts have created and modified
+     * recipes, so the map is expanded repeatedly just like the normal recipe
+     * manager table.  This also makes chained MBD proxy types independent of
+     * registry iteration order.</p>
+     *
+     * @param recipesByName mutable flat map keyed by recipe id
+     * @param recipeTypes MBD recipe types to initialize and expand
+     */
+    public static void onRecipeManagerLoadedKjs(
+            Map<ResourceLocation, Recipe<?>> recipesByName,
+            Iterable<? extends MBDRecipeType> recipeTypes) {
+        onRecipeManagerLoadedKjs(recipesByName, recipeTypes, ProxyRecipeTraversalPolicy.SINGLE_PASS);
+    }
+
+    /**
+     * Loads builtin and proxy recipes into KubeJS' flat recipe map with a
+     * source-specific traversal policy.
+     *
+     * @param recipesByName mutable flat map keyed by recipe id
+     * @param recipeTypes MBD recipe types to initialize and expand
+     * @param traversalPolicy determines the number of passes for each target/source pair
+     */
+    public static void onRecipeManagerLoadedKjs(
+            Map<ResourceLocation, Recipe<?>> recipesByName,
+            Iterable<? extends MBDRecipeType> recipeTypes,
+            ProxyRecipeTraversalPolicy traversalPolicy) {
+        Objects.requireNonNull(recipesByName, "recipesByName");
+        Objects.requireNonNull(traversalPolicy, "traversalPolicy");
+        var targets = snapshotRecipeTypes(recipeTypes);
+        if (targets.isEmpty()) return;
+
+        var context = new ProxyLoadContext(traversalPolicy);
+        for (var target : targets) {
+            target.proxyRecipes.clear();
+            target.builtinRecipes.values().forEach(recipe -> putRuntimeRecipe(recipesByName, recipe));
+            for (var sourceType : target.uniqueProxyRecipeTypes()) {
+                target.proxyRecipes.put(sourceType, new ArrayList<>());
             }
-            var recipes = new ArrayList<MBDRecipe>();
-            for (var recipe : new ArrayList<>(sourceRecipeMap.entrySet())) {
-                var mbdRecipe = toMBDrecipe(type, recipe.getKey(), recipe.getValue());
-                if (mbdRecipe != null) {
-                    recipes.add(mbdRecipe);
-                    putRuntimeRecipe(recipeTypeMap, mbdRecipe);
-                }
-            }
-            proxyRecipes.put(type, recipes);
         }
+
+        context.seedRecipes(recipesByName.values());
+        expandProxyRecipesKjs(recipesByName, targets, context);
     }
 
     /**
@@ -212,28 +327,7 @@ public class MBDRecipeType implements RecipeType<MBDRecipe>, ITagSerializable<Co
      * @param recipesByName flat recipe map keyed by recipe id
      */
     public void onRecipeManagerLoadedKjs(Map<ResourceLocation, Recipe<?>> recipesByName) {
-        var sourceRecipes = new ArrayList<>(recipesByName.entrySet());
-        builtinRecipes.values().forEach(recipe -> putRuntimeRecipe(recipesByName, recipe));
-        // load proxy recipes
-        proxyRecipes.clear();
-        var proxyRecipeTypes = new LinkedHashSet<>(this.proxyRecipeTypes);
-
-        if (proxyRecipeTypes.isEmpty()) return;
-        for (var entry : sourceRecipes) {
-            var key = entry.getKey();
-            var recipe = entry.getValue();
-            if (proxyRecipeTypes.contains(recipe.getType())) {
-                var mbdRecipe = toMBDrecipe(recipe.getType(), key, recipe);
-                if (mbdRecipe != null) {
-                    proxyRecipes.computeIfAbsent(recipe.getType(), type -> new ArrayList<>()).add(mbdRecipe);
-                }
-            }
-        }
-        for (List<MBDRecipe> recipes : proxyRecipes.values()) {
-            for (MBDRecipe recipe : recipes) {
-                putRuntimeRecipe(recipesByName, recipe);
-            }
-        }
+        onRecipeManagerLoadedKjs(recipesByName, List.of(this));
     }
 
     /**
@@ -263,7 +357,13 @@ public class MBDRecipeType implements RecipeType<MBDRecipe>, ITagSerializable<Co
      */
     public MBDRecipeType loadProductiveTag(@Nullable File file, CompoundTag tag, Deque<Runnable> postTask) {
         this.projectFile = file;
-        this.registryName = new ResourceLocation(tag.getCompound("recipe_type").getString("registryName"));
+        var recipeTypeTag = tag.getCompound("recipe_type");
+        this.registryName = new ResourceLocation(recipeTypeTag.getString("registryName"));
+        // Keep the display fallback available before deferred resource/UI loading. XEI categories can be created
+        // during client setup, before the post-load task runs.
+        if (recipeTypeTag.contains("displayName")) {
+            this.displayName = recipeTypeTag.getString("displayName");
+        }
         postTask.add(() -> {
             var texturesResource = new TexturesResource();
             texturesResource.deserializeNBT(tag.getCompound("resources").getCompound(TexturesResource.RESOURCE_NAME));
@@ -344,6 +444,36 @@ public class MBDRecipeType implements RecipeType<MBDRecipe>, ITagSerializable<Co
      */
     public ResourceLocation getFuelRegistryName() {
         return new ResourceLocation(registryName.getNamespace(), registryName.getPath() + ".fuel");
+    }
+
+    /**
+     * Resolves the localized name used by recipe viewers for this recipe type.
+     *
+     * <p>The registry-name translation remains authoritative when it exists. The editor-provided display name is
+     * used as the fallback for projects that do not provide a translation, matching machine display-name behavior.</p>
+     *
+     * @return localized recipe-type name, or the configured display name when its translation is missing
+     */
+    public Component getDisplayName() {
+        var translationKey = registryName.toLanguageKey();
+        return getDisplayName(Component.translatable(translationKey), translationKey);
+    }
+
+    /**
+     * Resolves a localized recipe-type name with an explicit translation component and fallback.
+     *
+     * <p>This overload mirrors the machine definition naming API and is useful to integrations that already have a
+     * pre-built localized component.</p>
+     *
+     * @param localizedName normal localized component to return when no display name is configured
+     * @param translationKey translation key represented by {@code localizedName}
+     * @return localized component, using the configured display name only when the translation is unavailable
+     */
+    public Component getDisplayName(Component localizedName, String translationKey) {
+        if (displayName != null && !displayName.isBlank()) {
+            return Component.translatableWithFallback(translationKey, displayName);
+        }
+        return localizedName;
     }
 
     /**
@@ -582,6 +712,29 @@ public class MBDRecipeType implements RecipeType<MBDRecipe>, ITagSerializable<Co
      */
     @Nullable
     public MBDRecipe toMBDrecipe(RecipeType<?> recipeType, ResourceLocation id, Recipe<?> recipe) {
+        return toMBDrecipe(recipeType, id, recipe, 1);
+    }
+
+    /**
+     * Converts an external recipe during a numbered proxy traversal.
+     *
+     * <p>Traversal one remains the compatibility entry point for existing
+     * {@link #toMBDrecipe(RecipeType, ResourceLocation, Recipe)} overrides.
+     * Later traversals start from the same external source recipe so KubeJS
+     * listeners can independently create or replace proxy recipes.</p>
+     *
+     * @param recipeType original recipe type
+     * @param id original recipe id
+     * @param recipe original recipe instance
+     * @param traversal one-based traversal number
+     * @return converted MBD recipe, or {@code null} when conversion produced no
+     * content or an event listener canceled it
+     */
+    @Nullable
+    public MBDRecipe toMBDrecipe(RecipeType<?> recipeType, ResourceLocation id, Recipe<?> recipe, int traversal) {
+        if (traversal < 1) {
+            throw new IllegalArgumentException("Proxy recipe traversal must be at least 1");
+        }
         MBDRecipe result = null;
         if (recipe instanceof MBDRecipe mbdRecipe) {
             if (mbdRecipe.recipeType == this || recipe.getType() == this) {
@@ -619,7 +772,7 @@ public class MBDRecipeType implements RecipeType<MBDRecipe>, ITagSerializable<Co
         }
         var proxyTypeId = ForgeRegistries.RECIPE_TYPES.getKey(recipeType);
         if (proxyTypeId != null) {
-            var event = new TransferProxyRecipeEvent(this, proxyTypeId, recipeType, id, recipe, result);
+            var event = new TransferProxyRecipeEvent(this, proxyTypeId, recipeType, id, recipe, traversal, result);
             MinecraftForge.EVENT_BUS.post(event.postCustomEvent());
             if (event.isCanceled()) {
                 return null;
@@ -635,6 +788,249 @@ public class MBDRecipeType implements RecipeType<MBDRecipe>, ITagSerializable<Co
 
     private static void putRuntimeRecipe(Map<ResourceLocation, Recipe<?>> recipeMap, MBDRecipe recipe) {
         recipeMap.put(recipe.getId(), recipe);
+    }
+
+    /**
+     * Takes a stable, identity-deduplicated snapshot of the recipe types that
+     * participate in one load. Registry views are live and may be backed by a
+     * mutable map, so retaining the caller's iterable would make the expansion
+     * order and termination dependent on external mutations.
+     */
+    private static List<MBDRecipeType> snapshotRecipeTypes(Iterable<? extends MBDRecipeType> recipeTypes) {
+        Objects.requireNonNull(recipeTypes, "recipeTypes");
+        var snapshot = new ArrayList<MBDRecipeType>();
+        var seen = Collections.newSetFromMap(new IdentityHashMap<MBDRecipeType, Boolean>());
+        for (var recipeType : recipeTypes) {
+            if (recipeType != null && seen.add(recipeType)) {
+                snapshot.add(recipeType);
+            }
+        }
+        return snapshot;
+    }
+
+    /**
+     * Returns the configured proxy sources in declaration order, ignoring null
+     * entries and duplicate values.
+     */
+    private List<RecipeType<?>> uniqueProxyRecipeTypes() {
+        var snapshot = new LinkedHashSet<RecipeType<?>>();
+        for (var proxyType : proxyRecipeTypes) {
+            if (proxyType != null) {
+                snapshot.add(proxyType);
+            }
+        }
+        return new ArrayList<>(snapshot);
+    }
+
+    /**
+     * Repeatedly expands normal recipe-manager tables until every currently
+     * reachable proxy source has been visited. Each source map is copied before
+     * it is scanned because a target can also be one of its own proxy sources.
+     */
+    private static void expandProxyRecipes(
+            Map<RecipeType<?>, Map<ResourceLocation, Recipe<?>>> rawRecipes,
+            List<MBDRecipeType> targets,
+            ProxyLoadContext context) {
+        boolean converted;
+        do {
+            converted = false;
+            for (var target : targets) {
+                var targetRecipes = rawRecipes.computeIfAbsent(target, type -> new HashMap<>());
+                for (var sourceType : target.uniqueProxyRecipeTypes()) {
+                    var sourceRecipes = rawRecipes.get(sourceType);
+                    if (sourceRecipes == null || sourceRecipes.isEmpty()) {
+                        continue;
+                    }
+                    for (var entry : new ArrayList<>(sourceRecipes.entrySet())) {
+                        var sourceId = entry.getKey();
+                        var sourceRecipe = entry.getValue();
+                        if (sourceId == null || sourceRecipe == null || context.containsTarget(sourceRecipe, target)) {
+                            continue;
+                        }
+
+                        var traversalCount = context.getTraversalCount(target, sourceType);
+                        for (int traversal = 1; ; traversal++) {
+                            if (context.markAttempt(target, sourceType, sourceId, sourceRecipe, traversal)) {
+                                // Keep existing three-argument overrides active for the first pass.
+                                var convertedRecipe = traversal == 1
+                                        ? target.toMBDrecipe(sourceType, sourceId, sourceRecipe)
+                                        : target.toMBDrecipe(sourceType, sourceId, sourceRecipe, traversal);
+                                if (convertedRecipe != null) {
+                                    context.record(sourceRecipe, convertedRecipe, target);
+                                    putRuntimeRecipe(targetRecipes, convertedRecipe);
+                                    target.addProxyRecipe(sourceType, convertedRecipe);
+                                    converted = true;
+                                }
+                            }
+                            if (traversal == traversalCount) {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        } while (converted);
+    }
+
+    /**
+     * KubeJS exposes one flat id-to-recipe map instead of the recipe-manager
+     * type buckets. The same fixed-point expansion is applied while filtering
+     * each snapshot by its recipe type.
+     */
+    private static void expandProxyRecipesKjs(
+            Map<ResourceLocation, Recipe<?>> recipesByName,
+            List<MBDRecipeType> targets,
+            ProxyLoadContext context) {
+        boolean converted;
+        do {
+            converted = false;
+            var sourceSnapshot = new ArrayList<>(recipesByName.entrySet());
+            for (var target : targets) {
+                for (var sourceType : target.uniqueProxyRecipeTypes()) {
+                    for (var entry : sourceSnapshot) {
+                        var sourceId = entry.getKey();
+                        var sourceRecipe = entry.getValue();
+                        var recipeSourceType = sourceRecipe == null ? null : sourceRecipe.getType();
+                        if (sourceId == null || sourceRecipe == null
+                                || !sourceType.equals(recipeSourceType)
+                                || context.containsTarget(sourceRecipe, target)) {
+                            continue;
+                        }
+
+                        var traversalCount = context.getTraversalCount(target, recipeSourceType);
+                        for (int traversal = 1; ; traversal++) {
+                            if (context.markAttempt(target, recipeSourceType, sourceId, sourceRecipe, traversal)) {
+                                // Keep existing three-argument overrides active for the first pass.
+                                var convertedRecipe = traversal == 1
+                                        ? target.toMBDrecipe(recipeSourceType, sourceId, sourceRecipe)
+                                        : target.toMBDrecipe(recipeSourceType, sourceId, sourceRecipe, traversal);
+                                if (convertedRecipe != null) {
+                                    context.record(sourceRecipe, convertedRecipe, target);
+                                    putRuntimeRecipe(recipesByName, convertedRecipe);
+                                    target.addProxyRecipe(recipeSourceType, convertedRecipe);
+                                    converted = true;
+                                }
+                            }
+                            if (traversal == traversalCount) {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        } while (converted);
+    }
+
+    private void addProxyRecipe(RecipeType<?> sourceType, MBDRecipe recipe) {
+        var recipes = proxyRecipes.computeIfAbsent(sourceType, type -> new ArrayList<>());
+        // The runtime recipe map is keyed by id, so retain only its active value
+        // when two traversal passes intentionally return the same recipe id.
+        recipes.removeIf(existing -> Objects.equals(existing.getId(), recipe.getId()));
+        recipes.add(recipe);
+    }
+
+    /**
+     * Per-load state used to make expansion deterministic and cycle-safe.
+     * Recipe and recipe-type relationships are identity based: two distinct
+     * runtime objects can legally expose the same id while still representing
+     * different conversion attempts.
+     */
+    private static final class ProxyLoadContext {
+        private final ProxyRecipeTraversalPolicy traversalPolicy;
+        private final IdentityHashMap<MBDRecipeType, IdentityHashMap<RecipeType<?>, Integer>> traversalCounts = new IdentityHashMap<>();
+        private final Set<ProxyConversionKey> attempted = new HashSet<>();
+        private final IdentityHashMap<Recipe<?>, Set<MBDRecipeType>> ancestry = new IdentityHashMap<>();
+
+        private ProxyLoadContext(ProxyRecipeTraversalPolicy traversalPolicy) {
+            this.traversalPolicy = traversalPolicy;
+        }
+
+        private void seedMaps(Iterable<? extends Map<ResourceLocation, Recipe<?>>> recipeMaps) {
+            for (var recipeMap : recipeMaps) {
+                if (recipeMap != null) {
+                    seedRecipes(recipeMap.values());
+                }
+            }
+        }
+
+        private void seedRecipes(Iterable<? extends Recipe<?>> recipes) {
+            for (var recipe : recipes) {
+                if (recipe instanceof MBDRecipe mbdRecipe && mbdRecipe.recipeType != null) {
+                    owners(recipe).add(mbdRecipe.recipeType);
+                }
+            }
+        }
+
+        private int getTraversalCount(MBDRecipeType target, RecipeType<?> sourceType) {
+            var targetCounts = traversalCounts.computeIfAbsent(target, ignored -> new IdentityHashMap<>());
+            return targetCounts.computeIfAbsent(sourceType,
+                    type -> Math.max(1, traversalPolicy.getTraversalCount(target, type)));
+        }
+
+        private boolean markAttempt(MBDRecipeType target, RecipeType<?> sourceType,
+                                    ResourceLocation sourceId, Recipe<?> sourceRecipe, int traversal) {
+            return attempted.add(new ProxyConversionKey(target, sourceType, sourceId, sourceRecipe, traversal));
+        }
+
+        private boolean containsTarget(Recipe<?> sourceRecipe, MBDRecipeType target) {
+            var owners = ancestry.get(sourceRecipe);
+            return owners != null && owners.contains(target);
+        }
+
+        private void record(Recipe<?> sourceRecipe, MBDRecipe convertedRecipe, MBDRecipeType target) {
+            var owners = owners(convertedRecipe);
+            var sourceOwners = ancestry.get(sourceRecipe);
+            if (sourceOwners != null) {
+                owners.addAll(sourceOwners);
+            }
+            owners.add(target);
+            if (convertedRecipe.recipeType != null) {
+                owners.add(convertedRecipe.recipeType);
+            }
+        }
+
+        private Set<MBDRecipeType> owners(Recipe<?> recipe) {
+            return ancestry.computeIfAbsent(recipe,
+                    ignored -> Collections.newSetFromMap(new IdentityHashMap<MBDRecipeType, Boolean>()));
+        }
+    }
+
+    private static final class ProxyConversionKey {
+        private final MBDRecipeType target;
+        private final RecipeType<?> sourceType;
+        private final ResourceLocation sourceId;
+        private final Recipe<?> sourceRecipe;
+        private final int traversal;
+
+        private ProxyConversionKey(MBDRecipeType target, RecipeType<?> sourceType,
+                                   ResourceLocation sourceId, Recipe<?> sourceRecipe, int traversal) {
+            this.target = target;
+            this.sourceType = sourceType;
+            this.sourceId = sourceId;
+            this.sourceRecipe = sourceRecipe;
+            this.traversal = traversal;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof ProxyConversionKey key)) return false;
+            return target == key.target
+                    && sourceType == key.sourceType
+                    && sourceRecipe == key.sourceRecipe
+                    && Objects.equals(sourceId, key.sourceId)
+                    && traversal == key.traversal;
+        }
+
+        @Override
+        public int hashCode() {
+            var result = System.identityHashCode(target);
+            result = 31 * result + System.identityHashCode(sourceType);
+            result = 31 * result + Objects.hashCode(sourceId);
+            result = 31 * result + System.identityHashCode(sourceRecipe);
+            result = 31 * result + traversal;
+            return result;
+        }
     }
 
     private static boolean hasRecipeContent(Map<RecipeCapability<?>, List<Content>> contents) {

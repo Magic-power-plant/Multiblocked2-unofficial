@@ -3,6 +3,7 @@ package com.lowdragmc.mbd2.integration.kubejs;
 import com.lowdragmc.lowdraglib.LDLib;
 import com.lowdragmc.mbd2.MBD2;
 import com.lowdragmc.mbd2.api.capability.recipe.IO;
+import com.lowdragmc.mbd2.api.recipe.MBDRecipeType;
 import com.lowdragmc.mbd2.api.recipe.content.ContentModifier;
 import com.lowdragmc.mbd2.api.registry.MBDRegistries;
 import com.lowdragmc.mbd2.common.machine.definition.config.ConfigBlockProperties;
@@ -67,9 +68,8 @@ public class MBDKubeJSPlugin extends KubeJSPlugin {
 
     @Override
     public void injectRuntimeRecipes(RecipesEventJS event, RecipeManager manager, Map<ResourceLocation, Recipe<?>> recipesByName) {
-        for (var recipeType : MBDRegistries.RECIPE_TYPES) {
-            recipeType.onRecipeManagerLoadedKjs(recipesByName);
-        }
+        MBDRecipeType.onRecipeManagerLoadedKjs(recipesByName, MBDRegistries.RECIPE_TYPES.values(),
+                MBDServerEvents::getProxyRecipeTraversalCount);
     }
 
     @Override

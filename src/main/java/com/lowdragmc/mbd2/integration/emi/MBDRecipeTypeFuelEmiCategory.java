@@ -78,6 +78,6 @@ public class MBDRecipeTypeFuelEmiCategory extends EmiRecipeCategory {
 
     @Override
     public Component getName() {
-        return Component.translatable("recipe_type.fuel", Component.translatable(recipeType.getRegistryName().toLanguageKey()));
+        return Component.translatable("recipe_type.fuel", recipeType.getDisplayName());
     }
 }

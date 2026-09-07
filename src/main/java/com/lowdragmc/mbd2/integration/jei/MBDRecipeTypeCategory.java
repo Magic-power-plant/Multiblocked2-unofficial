@@ -70,7 +70,7 @@ public class MBDRecipeTypeCategory extends ModularUIRecipeCategory<MBDRecipe> {
 
     @Override
     public Component getTitle() {
-        return Component.translatable(recipeType.getRegistryName().toLanguageKey());
+        return recipeType.getDisplayName();
     }
 
     public static void registerRecipes(IRecipeRegistration registration) {

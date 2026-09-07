@@ -626,6 +626,8 @@
 
     "recipe_type.registry_name": "имя реестра",
     "recipe_type.registry_name.tooltip": "Имя реестра должно быть уникальным.",
+    "recipe_type.display_name": "Отображаемое имя",
+    "recipe_type.display_name.tooltip": "Используется, если для типа рецепта нет локализованного имени.",
     "recipe_type.require_fuel": "требуется топливо",
     "recipe_type.require_fuel.tooltip": "Требует ли тип рецепта топлива для работы. Если истина, следует также добавить рецепты топлива.",
     "recipe_type.is_xei_visible": "видим ли xei",

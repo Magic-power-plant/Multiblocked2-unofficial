@@ -690,6 +690,8 @@
   "editor.machine_scene.draw_rendering_box_frame_lines": "draw frame lines of the render bounding box",
   "recipe_type.registry_name": "registry name",
   "recipe_type.registry_name.tooltip": "Registry name has to be unique.",
+  "recipe_type.display_name": "Display Name",
+  "recipe_type.display_name.tooltip": "Used when the recipe type has no localized name.",
   "recipe_type.require_fuel": "require fuel",
   "recipe_type.require_fuel.tooltip": "Whether the recipe type requires fuel to work. if true, you should add fuel recipes as well.",
   "recipe_type.is_xei_visible": "is xei visible",

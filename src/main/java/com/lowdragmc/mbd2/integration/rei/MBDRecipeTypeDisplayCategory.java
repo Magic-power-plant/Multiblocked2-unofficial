@@ -79,7 +79,7 @@ public class MBDRecipeTypeDisplayCategory extends ModularUIDisplayCategory<MBDRe
     @Nonnull
     @Override
     public Component getTitle() {
-        return Component.translatable(recipeType.getRegistryName().toLanguageKey());
+        return recipeType.getDisplayName();
     }
 
     public static void registerDisplays(DisplayRegistry registry) {

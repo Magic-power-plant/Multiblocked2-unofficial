@@ -1,5 +1,6 @@
 package com.lowdragmc.mbd2.integration.kubejs.events;
 
+import com.lowdragmc.mbd2.api.recipe.MBDRecipeType;
 import com.lowdragmc.mbd2.api.recipe.event.RecipeTypeEvent;
 import com.lowdragmc.mbd2.api.recipe.event.TransferProxyRecipeEvent;
 import com.lowdragmc.mbd2.MBD2;
@@ -11,6 +12,7 @@ import dev.latvian.mods.kubejs.event.Extra;
 import dev.latvian.mods.kubejs.script.ScriptType;
 import dev.latvian.mods.kubejs.util.MapJS;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.crafting.RecipeType;
 
 import java.util.LinkedHashSet;
 import java.util.HashMap;
@@ -162,10 +164,7 @@ public interface MBDServerEvents {
 
     // Recipe events
 
-    EventHandler TRANSFER_PROXY_RECIPE = registerRecipeTypeEvent("onTransferProxyRecipe",
-            TransferProxyRecipeEvent.class,
-            MBDRecipeTypeEvents.TransferProxyRecipeEventJS.class,
-            MBDRecipeTypeEvents.TransferProxyRecipeEventJS::new);
+    EventHandler TRANSFER_PROXY_RECIPE = registerTransferProxyRecipeEvent();
 
     static void init() {
         // NO-OP
@@ -193,6 +192,41 @@ public interface MBDServerEvents {
         var handler = MBDRecipeTypeEvents.MBD_RECIPE_TYPE_EVENTS.server(name, () -> eventJSClass).extra(Extra.ID);
         recipeTypeEventHandlers.put(eventClass, event -> handler.post(eventJSFactory.apply((E) event), event.recipeType.getRegistryName()));
         return handler;
+    }
+
+    /**
+     * Registers proxy conversion separately because its listener key is the
+     * receiving MBD recipe type plus traversal number.
+     */
+    static EventHandler registerTransferProxyRecipeEvent() {
+        var handler = MBDRecipeTypeEvents.MBD_RECIPE_TYPE_EVENTS.server("onTransferProxyRecipe",
+                () -> MBDRecipeTypeEvents.TransferProxyRecipeEventJS.class).extra(ProxyRecipeTraversalKey.EXTRA);
+        recipeTypeEventHandlers.put(TransferProxyRecipeEvent.class, event -> {
+            var transferEvent = (TransferProxyRecipeEvent) event;
+            var key = ProxyRecipeTraversalKey.from(transferEvent);
+            return handler.post(new MBDRecipeTypeEvents.TransferProxyRecipeEventJS(transferEvent), key);
+        });
+        return handler;
+    }
+
+    /**
+     * Resolves the number of KubeJS-requested traversals for one receiving MBD
+     * recipe type. A bare {@code mbd_recipe_type} selects traversal one;
+     * registering {@code mbd_recipe_type@2} requests both traversal one and
+     * two for that target.
+     */
+    static int getProxyRecipeTraversalCount(MBDRecipeType recipeType, RecipeType<?> proxyType) {
+        if (recipeType == null || recipeType.getRegistryName() == null) {
+            return 1;
+        }
+        var recipeTypeId = recipeType.getRegistryName();
+        var traversalCount = 1;
+        for (var extraId : TRANSFER_PROXY_RECIPE.findUniqueExtraIds(ScriptType.SERVER)) {
+            if (extraId instanceof ProxyRecipeTraversalKey key && key.recipeTypeId.equals(recipeTypeId)) {
+                traversalCount = Math.max(traversalCount, key.traversal);
+            }
+        }
+        return traversalCount;
     }
 
     static EventResult postMachineEvent(MachineEvent machineEvent) {
@@ -232,6 +266,62 @@ public interface MBDServerEvents {
 
     static EventResult postRecipeTypeEvent(RecipeTypeEvent recipeTypeEvent) {
         return Optional.ofNullable(recipeTypeEventHandlers.get(recipeTypeEvent.getClass())).map(handler -> handler.apply(recipeTypeEvent)).orElse(EventResult.PASS);
+    }
+
+    /**
+     * KubeJS extra id for one receiving MBD recipe type traversal.
+     */
+    record ProxyRecipeTraversalKey(ResourceLocation recipeTypeId, int traversal) {
+        static final Extra EXTRA = new Extra()
+                .transformer(ProxyRecipeTraversalKey::of)
+                .validator(ProxyRecipeTraversalKey.class::isInstance)
+                .toString(value -> value.toString());
+
+        public ProxyRecipeTraversalKey {
+            if (recipeTypeId == null) {
+                throw new IllegalArgumentException("MBD recipe type id cannot be null");
+            }
+            if (traversal < 1) {
+                throw new IllegalArgumentException("Proxy recipe traversal must be at least 1");
+            }
+        }
+
+        static ProxyRecipeTraversalKey from(TransferProxyRecipeEvent transferEvent) {
+            return new ProxyRecipeTraversalKey(transferEvent.recipeType.getRegistryName(), transferEvent.traversal);
+        }
+
+        public static ProxyRecipeTraversalKey of(Object value) {
+            if (value instanceof ProxyRecipeTraversalKey key) {
+                return key;
+            }
+            if (value instanceof CharSequence chars) {
+                var raw = chars.toString();
+                var at = raw.lastIndexOf('@');
+                if (at < 0) {
+                    var recipeTypeId = ResourceLocation.tryParse(raw);
+                    if (recipeTypeId != null) {
+                        return new ProxyRecipeTraversalKey(recipeTypeId, 1);
+                    }
+                }
+                if (at > 0 && at < raw.length() - 1) {
+                    var recipeTypeId = ResourceLocation.tryParse(raw.substring(0, at));
+                    if (recipeTypeId == null) {
+                        throw new IllegalArgumentException("Invalid MBD recipe type id: " + raw.substring(0, at));
+                    }
+                    try {
+                        return new ProxyRecipeTraversalKey(recipeTypeId, Integer.parseInt(raw.substring(at + 1)));
+                    } catch (NumberFormatException e) {
+                        throw new IllegalArgumentException("Invalid proxy recipe traversal: " + raw.substring(at + 1), e);
+                    }
+                }
+            }
+            throw new IllegalArgumentException("Use 'namespace:mbd_recipe_type' or 'namespace:mbd_recipe_type@traversal', for example 'mbd2:fluid_gas@2'");
+        }
+
+        @Override
+        public String toString() {
+            return recipeTypeId + "@" + traversal;
+        }
     }
 
     record FixedTickKey(ResourceLocation machineId, int interval) {
