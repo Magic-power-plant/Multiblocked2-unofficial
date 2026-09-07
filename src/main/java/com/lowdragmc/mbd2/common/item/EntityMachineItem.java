@@ -5,6 +5,7 @@ import com.lowdragmc.lowdraglib.client.renderer.IRenderer;
 import com.lowdragmc.mbd2.common.machine.definition.EntityMachineDefinition;
 import net.minecraft.MethodsReturnNonnullByDefault;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
@@ -48,6 +49,17 @@ public class EntityMachineItem extends Item implements IItemRendererProvider {
      */
     public EntityMachineDefinition getDefinition() {
         return definition;
+    }
+
+    /**
+     * Returns the localized spawn-item name with the definition's configured display name as its fallback.
+     *
+     * @param stack entity machine item stack being named
+     * @return translated item name, or the configured display name when its translation key is absent
+     */
+    @Override
+    public Component getName(ItemStack stack) {
+        return definition.getDisplayName(super.getName(stack), getDescriptionId(stack));
     }
 
     /**

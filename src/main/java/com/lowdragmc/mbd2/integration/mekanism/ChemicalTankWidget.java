@@ -524,7 +524,7 @@ public abstract class ChemicalTankWidget<CHEMICAL extends Chemical<CHEMICAL>, ST
         @Override
         public void buildConfigurator(ConfiguratorGroup father) {
             if (ChemicalTankBuilder.GAS.createAllValid(2000, null) instanceof IGasHandler handler) {
-                handler.insertChemical(MekanismChemicalRecipeCapability.CAP_GAS.createDefaultContent(), Action.EXECUTE);
+                handler.insertChemical(MekanismChemicalRecipeCapability.CAP_GAS.createDefaultStack(), Action.EXECUTE);
                 father.addConfigurators(new WrapperConfigurator("ldlib.gui.editor.group.preview", new Gas() {
                     @Override
                     public void updateScreen() {
@@ -576,7 +576,7 @@ public abstract class ChemicalTankWidget<CHEMICAL extends Chemical<CHEMICAL>, ST
         @Override
         public void buildConfigurator(ConfiguratorGroup father) {
             if (ChemicalTankBuilder.INFUSION.createAllValid(2000, null) instanceof IInfusionHandler handler) {
-                handler.insertChemical(MekanismChemicalRecipeCapability.CAP_INFUSE.createDefaultContent(), Action.EXECUTE);
+                handler.insertChemical(MekanismChemicalRecipeCapability.CAP_INFUSE.createDefaultStack(), Action.EXECUTE);
                 father.addConfigurators(new WrapperConfigurator("ldlib.gui.editor.group.preview", new Infuse() {
                     @Override
                     public void updateScreen() {
@@ -629,7 +629,7 @@ public abstract class ChemicalTankWidget<CHEMICAL extends Chemical<CHEMICAL>, ST
         @Override
         public void buildConfigurator(ConfiguratorGroup father) {
             if (ChemicalTankBuilder.PIGMENT.createAllValid(2000, null) instanceof IPigmentHandler handler) {
-                handler.insertChemical(MekanismChemicalRecipeCapability.CAP_PIGMENT.createDefaultContent(), Action.EXECUTE);
+                handler.insertChemical(MekanismChemicalRecipeCapability.CAP_PIGMENT.createDefaultStack(), Action.EXECUTE);
                 father.addConfigurators(new WrapperConfigurator("ldlib.gui.editor.group.preview", new Pigment() {
                     @Override
                     public void updateScreen() {
@@ -681,7 +681,7 @@ public abstract class ChemicalTankWidget<CHEMICAL extends Chemical<CHEMICAL>, ST
         @Override
         public void buildConfigurator(ConfiguratorGroup father) {
             if (ChemicalTankBuilder.SLURRY.createAllValid(2000, null) instanceof ISlurryHandler handler) {
-                handler.insertChemical(MekanismChemicalRecipeCapability.CAP_SLURRY.createDefaultContent(), Action.EXECUTE);
+                handler.insertChemical(MekanismChemicalRecipeCapability.CAP_SLURRY.createDefaultStack(), Action.EXECUTE);
                 father.addConfigurators(new WrapperConfigurator("ldlib.gui.editor.group.preview", new Slurry() {
                     @Override
                     public void updateScreen() {

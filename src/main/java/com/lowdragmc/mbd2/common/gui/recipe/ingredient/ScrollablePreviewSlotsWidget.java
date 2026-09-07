@@ -298,7 +298,7 @@ public class ScrollablePreviewSlotsWidget extends DraggableScrollableWidgetGroup
         var tooltips = new ArrayList<Component>();
         slot.content.appendTooltip(tooltips,
                 slot.capability.supportsOutputRange(slot.content.minOutput, slot.content.maxOutput)
-                        && slot.capability.supportsOutputMultiplier(slot.content.content, slot.content.maxOutput));
+                        && slot.capability.supportsOutputMultiplier(slot.content.content, slot.content.maxOutput), slot.io);
         if (!tooltips.isEmpty()) {
             widget.appendHoverTooltips(tooltips);
         }

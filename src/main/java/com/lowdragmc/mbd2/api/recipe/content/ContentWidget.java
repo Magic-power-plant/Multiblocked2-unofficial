@@ -2,6 +2,7 @@ package com.lowdragmc.mbd2.api.recipe.content;
 
 import com.lowdragmc.lowdraglib.gui.widget.Widget;
 import com.lowdragmc.lowdraglib.gui.widget.WidgetGroup;
+import com.lowdragmc.mbd2.api.capability.recipe.IO;
 import com.lowdragmc.mbd2.api.capability.recipe.RecipeCapability;
 import lombok.Getter;
 import net.minecraft.client.gui.GuiGraphics;
@@ -11,6 +12,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import org.jetbrains.annotations.NotNull;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,6 +31,8 @@ import java.util.List;
 public class ContentWidget<T> extends WidgetGroup {
     private final RecipeCapability<T> cap;
     private final Content content;
+    @Nullable
+    private final IO io;
     private Tag lastContentTag;
     private long lastPreviewVersion;
 
@@ -44,9 +48,24 @@ public class ContentWidget<T> extends WidgetGroup {
      * @param content content wrapper to display
      */
     public ContentWidget(int x, int y, RecipeCapability<T> cap, Content content) {
+        this(x, y, cap, content, null);
+    }
+
+    /**
+     * Creates a 20x20 content preview widget for a recipe side.
+     *
+     * @param x       widget x coordinate
+     * @param y       widget y coordinate
+     * @param cap     capability used to convert and preview the content
+     * @param content content wrapper to display
+     * @param io      recipe side represented by this preview, or {@code null}
+     *                for a direction-neutral preview
+     */
+    public ContentWidget(int x, int y, RecipeCapability<T> cap, Content content, @Nullable IO io) {
         super(x, y, 20, 20);
         this.cap = cap;
         this.content = content;
+        this.io = io;
         this.lastContentTag = createContentTag();
         this.lastPreviewVersion = content.getPreviewVersion();
         var contentWidget = createPreviewWidget();
@@ -133,7 +152,7 @@ public class ContentWidget<T> extends WidgetGroup {
                 tooltips.addAll(gui.getModularUIGui().tooltipTexts);
             }
             content.appendTooltip(tooltips, cap.supportsOutputRange(content.minOutput, content.maxOutput)
-                    && cap.supportsOutputMultiplier(content.content, content.maxOutput));
+                    && cap.supportsOutputMultiplier(content.content, content.maxOutput), io);
             if (!tooltips.isEmpty()) {
                 gui.getModularUIGui().tooltipTexts = tooltips;
             }

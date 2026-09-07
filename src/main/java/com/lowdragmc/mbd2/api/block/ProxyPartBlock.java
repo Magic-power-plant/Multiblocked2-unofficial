@@ -3,7 +3,9 @@ package com.lowdragmc.mbd2.api.block;
 import com.lowdragmc.lowdraglib.client.renderer.IBlockRendererProvider;
 import com.lowdragmc.lowdraglib.client.renderer.IRenderer;
 import com.lowdragmc.mbd2.api.blockentity.ProxyPartBlockEntity;
+import com.lowdragmc.mbd2.api.machine.IMachine;
 import com.lowdragmc.mbd2.client.renderer.ProxyPartRenderer;
+import com.lowdragmc.mbd2.common.machine.MBDMachine;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -17,6 +19,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -121,6 +126,73 @@ public class ProxyPartBlock extends Block implements EntityBlock, IBlockRenderer
             return blockEntity.getOriginalState().getDestroyProgress(pPlayer, pLevel, pPos);
         }
         return 0;
+    }
+
+    /**
+     * Keeps the proxy's interaction outline consistent with the captured block.
+     * A proxy without captured data is non-selectable instead of becoming a full
+     * cube that can obscure an oversized controller shape.
+     */
+    @Override
+    public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        if (level.getBlockEntity(pos) instanceof ProxyPartBlockEntity blockEntity && blockEntity.getOriginalState() != null) {
+            return blockEntity.getOriginalState().getShape(level, pos, context);
+        }
+        return Shapes.empty();
+    }
+
+    /**
+     * Delegates physical collision to the captured block while the proxy is
+     * active, preserving normal gameplay for hidden structural blocks.
+     */
+    @Override
+    public VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        if (level.getBlockEntity(pos) instanceof ProxyPartBlockEntity blockEntity && blockEntity.getOriginalState() != null) {
+            return blockEntity.getOriginalState().getCollisionShape(level, pos, context);
+        }
+        return Shapes.empty();
+    }
+
+    /**
+     * Delegates interaction ray tracing to the original block state.
+     */
+    @Override
+    public VoxelShape getInteractionShape(BlockState state, BlockGetter level, BlockPos pos) {
+        if (level.getBlockEntity(pos) instanceof ProxyPartBlockEntity blockEntity && blockEntity.getOriginalState() != null) {
+            return blockEntity.getOriginalState().getInteractionShape(level, pos);
+        }
+        return Shapes.empty();
+    }
+
+    @Override
+    public boolean isCollisionShapeFullBlock(BlockState state, BlockGetter level, BlockPos pos) {
+        // The proxy's collision can still be solid for entity physics, but it
+        // must never advertise a full occlusion cube to adjacent renderers.
+        return false;
+    }
+
+    /**
+     * Makes block inspection tools identify a proxy with the controller it
+     * visually represents instead of the internal proxy block registration.
+     */
+    @Override
+    public ItemStack getCloneItemStack(BlockGetter level, BlockPos pos, BlockState state) {
+        if (level.getBlockEntity(pos) instanceof ProxyPartBlockEntity blockEntity) {
+            if (blockEntity.getControllerPos() != null) {
+                var controllerStack = IMachine.ofMachine(level, blockEntity.getControllerPos())
+                        .filter(MBDMachine.class::isInstance)
+                        .map(MBDMachine.class::cast)
+                        .map(machine -> machine.getDefinition().asStack())
+                        .orElse(ItemStack.EMPTY);
+                if (!controllerStack.isEmpty()) {
+                    return controllerStack;
+                }
+            }
+            if (blockEntity.getOriginalState() != null) {
+                return blockEntity.getOriginalState().getBlock().getCloneItemStack(level, pos, blockEntity.getOriginalState());
+            }
+        }
+        return ItemStack.EMPTY;
     }
 
     /**

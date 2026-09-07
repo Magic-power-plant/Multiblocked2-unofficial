@@ -200,7 +200,7 @@ public class ContentContainer extends WidgetGroup {
     private SelectableWidgetGroup createContentLine(RecipeCapability<?> cap, Content content) {
         var width = container.getSizeWidth() - 5;
         var contentLine = new SelectableWidgetGroup(0, 0, width, 20);
-        var contentWidget = new ContentWidget<>(0, 0, cap, content);
+        var contentWidget = new ContentWidget<>(0, 0, cap, content, io);
         contentWidgets.put(content, contentWidget);
         var dur = 5;
         var x = 0;

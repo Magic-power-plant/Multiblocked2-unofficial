@@ -82,9 +82,7 @@ public class ChemicalFilterSettings<CHEMICAL extends Chemical<CHEMICAL>, STACK e
         IToggleConfigurable.super.buildConfigurator(father);
         var arrayGroup = new ArrayConfiguratorGroup<>("config.definition.trait.filter.chemicals", true, () -> filterChemicals, (getter, setter) -> {
             var configuratorGroup = new ConfiguratorGroup("");
-            recipeCapability.createContentConfigurator(configuratorGroup,
-                    () -> recipeCapability.createStack.apply(getter.get(), 1L),
-                    stack -> setter.accept(stack.getType()));
+            recipeCapability.createChemicalContentConfigurator(configuratorGroup, getter, setter);
             return configuratorGroup;
         }, true);
         arrayGroup.setOnAdd(chemical -> filterChemicals.add(chemical));

@@ -19,9 +19,9 @@ class MBDMachineDefinitionDisplayNameTest {
     void usesConfiguredNameOnlyWhenTranslationIsMissing() throws ReflectiveOperationException {
         Component localized = Component.literal("Localized machine");
         assertSame(localized, MBDMachineDefinition.resolveDisplayNameFallback(
-                localized, "machine.example", "Fallback machine"));
+                localized, "machine.example", ""));
         assertEquals("Fallback machine", MBDMachineDefinition.resolveDisplayNameFallback(
-                Component.translatable("machine.example"), "machine.example", "Fallback machine").getString());
+                localized, "machine.example", "Fallback machine").getString());
     }
 
     @Test

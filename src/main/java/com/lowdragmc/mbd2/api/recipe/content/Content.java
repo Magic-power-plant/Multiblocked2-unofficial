@@ -4,6 +4,7 @@ import com.lowdragmc.lowdraglib.gui.editor.annotation.Configurable;
 import com.lowdragmc.lowdraglib.gui.editor.annotation.NumberRange;
 import com.lowdragmc.lowdraglib.gui.texture.IGuiTexture;
 import com.lowdragmc.lowdraglib.utils.LocalizationUtils;
+import com.lowdragmc.mbd2.api.capability.recipe.IO;
 import com.lowdragmc.mbd2.api.capability.recipe.RecipeCapability;
 import lombok.Getter;
 import net.minecraft.client.Minecraft;
@@ -342,13 +343,26 @@ public class Content {
      * @param tooltips mutable tooltip list to append to
      */
     public void appendTooltip(List<Component> tooltips) {
-        appendTooltip(tooltips, true);
+        appendTooltip(tooltips, true, null);
     }
 
     /**
-     * Appends content metadata tooltips, optionally including output range.
+     * Appends content metadata tooltips, optionally including output range and
+     * an IO-specific per-tick description.
+     *
+     * @param tooltips        mutable tooltip list to append to
+     * @param showOutputRange whether supported output ranges should be shown
+     * @param io              recipe side shown by the widget, or {@code null}
+     *                        when a generic per-tick description is required
      */
     public void appendTooltip(List<Component> tooltips, boolean showOutputRange) {
+        appendTooltip(tooltips, showOutputRange, null);
+    }
+
+    /**
+     * Appends content metadata tooltips with an optional recipe IO direction.
+     */
+    public void appendTooltip(List<Component> tooltips, boolean showOutputRange, @Nullable IO io) {
         if (chance != 1) {
             if (chance == 0) {
                 tooltips.add(Component.translatable("mbd2.gui.content.chance_0"));
@@ -360,7 +374,11 @@ public class Content {
             tooltips.add(Component.translatable("mbd2.gui.content.tier_boost", (int) (tierChanceBoost * 100) + "%"));
         }
         if (perTick) {
-            tooltips.add(Component.translatable("mbd2.gui.content.per_tick"));
+            tooltips.add(Component.translatable(switch (io == null ? IO.NONE : io) {
+                case IN -> "mbd2.gui.content.per_tick_input";
+                case OUT -> "mbd2.gui.content.per_tick_output";
+                default -> "mbd2.gui.content.per_tick";
+            }));
         }
         if (showOutputRange && hasOutputRange()) {
             tooltips.add(Component.translatable("mbd2.gui.content.output_range", minOutput, maxOutput));

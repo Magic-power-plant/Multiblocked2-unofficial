@@ -1591,7 +1591,11 @@ public class MBDMachine implements IMachine, IEnhancedManaged, ICapabilityProvid
             aabb = aabb.move(getPos());
             return aabb;
         }
-        return null;
+        // A state may use its collision/selection shape as the visual model
+        // footprint. The vanilla block-entity fallback only covers one block,
+        // which culls models extending outside the controller block.
+        var shape = getShape(CollisionContext.empty());
+        return shape.isEmpty() ? null : shape.bounds().move(getPos());
     }
 
     /**

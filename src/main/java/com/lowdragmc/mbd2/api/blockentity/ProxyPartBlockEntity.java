@@ -1,17 +1,23 @@
 package com.lowdragmc.mbd2.api.blockentity;
 
+import com.lowdragmc.mbd2.api.machine.IMachine;
+import com.lowdragmc.mbd2.common.machine.MBDMachine;
 import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.world.Nameable;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraftforge.registries.RegistryObject;
 
 import javax.annotation.Nullable;
@@ -24,7 +30,7 @@ import javax.annotation.Nullable;
  * captured block and data back into the world. World mutations are server-side operations; client sync only mirrors
  * the captured state for rendering.</p>
  */
-public class ProxyPartBlockEntity extends BlockEntity {
+public class ProxyPartBlockEntity extends BlockEntity implements Nameable {
     @Getter
     @Setter
     private boolean isAsyncSyncing = false;
@@ -58,6 +64,53 @@ public class ProxyPartBlockEntity extends BlockEntity {
      */
     public ProxyPartBlockEntity(BlockPos pPos, BlockState pBlockState) {
         super(TYPE(), pPos, pBlockState);
+    }
+
+    /**
+     * Uses the owning controller name for proxy blocks so rendered multiblock
+     * parts do not expose the internal proxy registry key.
+     */
+    @Override
+    public Component getName() {
+        if (level != null && controllerPos != null) {
+            var controller = level.getBlockEntity(controllerPos);
+            if (controller instanceof Nameable nameable) {
+                return nameable.getDisplayName();
+            }
+        }
+        if (originalState != null) {
+            return originalState.getBlock().getName();
+        }
+        return getBlockState().getBlock().getName();
+    }
+
+    /**
+     * Mirrors the controller's render footprint at this proxy position. This
+     * is required because the proxy renderer draws the controller model from
+     * each part block entity, while vanilla otherwise culls it to one block.
+     */
+    @Override
+    public AABB getRenderBoundingBox() {
+        if (level != null && controllerPos != null) {
+            var controllerBox = IMachine.ofMachine(level, controllerPos)
+                    .filter(MBDMachine.class::isInstance)
+                    .map(MBDMachine.class::cast)
+                    .map(MBDMachine::getRenderBoundingBox)
+                    .orElse(null);
+            if (controllerBox != null) {
+                return controllerBox.move(
+                        getBlockPos().getX() - controllerPos.getX(),
+                        getBlockPos().getY() - controllerPos.getY(),
+                        getBlockPos().getZ() - controllerPos.getZ());
+            }
+        }
+        if (level != null && originalState != null) {
+            var shape = originalState.getShape(level, getBlockPos(), CollisionContext.empty());
+            if (!shape.isEmpty()) {
+                return shape.bounds().move(getBlockPos());
+            }
+        }
+        return super.getRenderBoundingBox();
     }
 
     /**

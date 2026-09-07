@@ -85,13 +85,13 @@ public class RecipeList extends DraggableScrollableWidgetGroup {
                 )));
         // add inputs
         AtomicReference<WidgetGroup> inputs = new AtomicReference<>();
-        inputs.set(createContents(recipe.inputs, 0, 20));
+        inputs.set(createContents(recipe.inputs, 0, 20, IO.IN));
         selectableWidgetGroup.addWidget(inputs.get());
 
         // add outputs
         AtomicReference<WidgetGroup> outputs = new AtomicReference<>();
         if (!isFuel) {
-            outputs.set(createContents(recipe.outputs, getSizeWidth() - 24, -20));
+            outputs.set(createContents(recipe.outputs, getSizeWidth() - 24, -20, IO.OUT));
             selectableWidgetGroup.addWidget(outputs.get());
         }
 
@@ -111,7 +111,7 @@ public class RecipeList extends DraggableScrollableWidgetGroup {
                     .addWidget(new ImageWidget(0, 0, w, 10, new TextTexture(IO.IN.getTooltip()).setWidth(w)))
                     .addWidget(inputsContainer = new ContentContainer(0, 10, w, h / 2 - 18, recipe.inputs, () -> {
                         selectableWidgetGroup.removeWidget(inputs.get());
-                        inputs.set(createContents(recipe.inputs, 0, 20));
+                        inputs.set(createContents(recipe.inputs, 0, 20, IO.IN));
                         selectableWidgetGroup.addWidget(inputs.get());
                         recipeTypePanel.getFloatView().refreshRecipe();
                     }, IO.IN));
@@ -149,7 +149,7 @@ public class RecipeList extends DraggableScrollableWidgetGroup {
                 container.addWidget(new ImageWidget(0, h / 2 + 8, w, 10, new TextTexture(IO.OUT.getTooltip()).setWidth(w)))
                         .addWidget(outputsContainer = new ContentContainer(0, h / 2 + 18, w, h / 2 - 18, recipe.outputs, () -> {
                             selectableWidgetGroup.removeWidget(outputs.get());
-                            outputs.set(createContents(recipe.outputs, getSizeWidth() - 24, -20));
+                            outputs.set(createContents(recipe.outputs, getSizeWidth() - 24, -20, IO.OUT));
                             selectableWidgetGroup.addWidget(outputs.get());
                             recipeTypePanel.getFloatView().refreshRecipe();
                         }, IO.OUT));
@@ -210,16 +210,17 @@ public class RecipeList extends DraggableScrollableWidgetGroup {
      * @param x              starting x position for the first content widget
      * @param offset         x offset applied between content widgets; negative values lay widgets
      *                       out to the left
+     * @param io             recipe side represented by the compact previews
      * @return widget group containing as many content widgets as fit in the row half
      */
-    private WidgetGroup createContents(Map<RecipeCapability<?>, List<Content>> recipeContents, int x, int offset) {
+    private WidgetGroup createContents(Map<RecipeCapability<?>, List<Content>> recipeContents, int x, int offset, IO io) {
         WidgetGroup group = new WidgetGroup(0, 0, 0, 0);
         var left = (getSizeWidth() - 22) / 2 / 20;
         for (var entry : recipeContents.entrySet()) {
             if (left > 0) {
                 var contents = entry.getValue();
                 for (var content : contents) {
-                    var widget = new ContentWidget<>(x, 10, entry.getKey(), content);
+                    var widget = new ContentWidget<>(x, 10, entry.getKey(), content, io);
                     group.addWidget(widget);
                     left--;
                     x += offset;

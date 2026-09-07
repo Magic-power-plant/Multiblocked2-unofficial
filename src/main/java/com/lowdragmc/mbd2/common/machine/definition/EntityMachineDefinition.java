@@ -482,7 +482,7 @@ public class EntityMachineDefinition extends MBDMachineDefinition {
     @Override
     protected Component getMachineName(MBDMachine machine) {
         String translationKey = id().toLanguageKey("machine");
-        return getDisplayNameFallback(Component.translatable(translationKey), translationKey);
+        return getDisplayName(Component.translatable(translationKey), translationKey);
     }
 
     /**

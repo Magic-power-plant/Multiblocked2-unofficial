@@ -30,6 +30,7 @@ import mekanism.api.chemical.pigment.IPigmentHandler;
 import mekanism.api.chemical.pigment.PigmentStack;
 import mekanism.api.chemical.slurry.ISlurryHandler;
 import mekanism.api.chemical.slurry.SlurryStack;
+import mekanism.api.recipes.ingredients.ChemicalStackIngredient;
 import mekanism.common.capabilities.Capabilities;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -40,14 +41,14 @@ import net.minecraftforge.common.capabilities.Capability;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
-import java.util.Iterator;
+import java.util.ListIterator;
 import java.util.List;
 import java.util.function.Predicate;
 
 /**
  * Machine trait that stores Mekanism chemicals, exposes chemical capabilities, and handles recipe transfer.
  */
-public abstract class ChemicalTankCapabilityTrait<CHEMICAL extends Chemical<CHEMICAL>, STACK extends ChemicalStack<CHEMICAL>, HANDLER extends IChemicalHandler<CHEMICAL, STACK>> extends SimpleCapabilityTrait implements IRecipeHandlerTrait<STACK>, ICapabilityProviderTrait<HANDLER>, IAutoIOTrait {
+public abstract class ChemicalTankCapabilityTrait<CHEMICAL extends Chemical<CHEMICAL>, STACK extends ChemicalStack<CHEMICAL>, HANDLER extends IChemicalHandler<CHEMICAL, STACK>> extends SimpleCapabilityTrait implements IRecipeHandlerTrait<ChemicalStackIngredient<CHEMICAL, STACK>>, ICapabilityProviderTrait<HANDLER>, IAutoIOTrait {
     public static final ManagedFieldHolder MANAGED_FIELD_HOLDER = new ManagedFieldHolder(ChemicalTankCapabilityTrait.class, RecipeCapabilityTrait.MANAGED_FIELD_HOLDER);
 
     @Override
@@ -76,7 +77,7 @@ public abstract class ChemicalTankCapabilityTrait<CHEMICAL extends Chemical<CHEM
     @Override
     public void onLoadingTraitInPreview() {
         if (storages.length > 0) {
-            var stack = getDefinition().recipeCapability.createDefaultContent();
+            var stack = getDefinition().recipeCapability.createDefaultStack();
             stack.setAmount(getDefinition().getCapacity() / 2);
             storages[0].setStackUnchecked(stack);
         }
@@ -190,59 +191,74 @@ public abstract class ChemicalTankCapabilityTrait<CHEMICAL extends Chemical<CHEM
     }
 
     @Override
-    public RecipeCapability<STACK> getRecipeCapability() {
+    public RecipeCapability<ChemicalStackIngredient<CHEMICAL, STACK>> getRecipeCapability() {
         return getDefinition().getRecipeCapability();
     }
 
     @Override
-    public List<STACK> handleRecipeInner(IO io, MBDRecipe recipe, List<STACK> left, @Nullable String slotName, boolean simulate) {
+    public List<ChemicalStackIngredient<CHEMICAL, STACK>> handleRecipeInner(IO io, MBDRecipe recipe,
+                                                                              List<ChemicalStackIngredient<CHEMICAL, STACK>> left,
+                                                                              @Nullable String slotName, boolean simulate) {
         if (!compatibleWith(io)) return left;
         var capabilities = simulate ? Arrays.stream(storages).map(ChemicalStorage::copy).toArray(ChemicalStorage[]::new) : storages;
         for (var capability : capabilities) {
-            Iterator<STACK> iterator = left.iterator();
+            ListIterator<ChemicalStackIngredient<CHEMICAL, STACK>> iterator = left.listIterator();
             if (io == IO.IN) {
                 while (iterator.hasNext()) {
-                    var chemicalStack = iterator.next();
-                    if (chemicalStack.isEmpty()) {
+                    var chemicalIngredient = iterator.next();
+                    if (getDefinition().getRecipeCapability().isEmptyIngredient(chemicalIngredient)) {
                         iterator.remove();
                         continue;
                     }
                     boolean found = false;
                     STACK foundStack = null;
                     for (int i = 0; i < capability.getTanks(); i++) {
-                        var stored = capability.getChemicalInTank(i);
-                        if (!chemicalStack.isTypeEqual(stored)) {
+                        STACK stored = (STACK) capability.getChemicalInTank(i);
+                        // Ingredient matching deliberately ignores the stored amount here. A tagged requirement may be
+                        // satisfied by several tanks, and each pass subtracts only what the current tank can supply.
+                        if (!chemicalIngredient.testType(stored)) {
                             continue;
                         }
                         found = true;
-                        foundStack = (STACK) stored;
+                        foundStack = stored;
                     }
                     if (!found) continue;
                     var copied = foundStack.copy();
-                    copied.setAmount(chemicalStack.getAmount());
+                    long required = chemicalIngredient.getNeededAmount(foundStack);
+                    if (required <= 0) {
+                        continue;
+                    }
+                    copied.setAmount(required);
                     var drained = capability.extractChemical(copied, Action.EXECUTE);
                     if (!simulate && !drained.isEmpty()) {
                         RecipeConsumptionTracker.record(getRecipeCapability(), drained.copy(), slotName);
                     }
 
-                    chemicalStack.setAmount(chemicalStack.getAmount() - drained.getAmount());
-                    if (chemicalStack.getAmount() <= 0) {
+                    long remaining = required - drained.getAmount();
+                    if (remaining <= 0) {
                         iterator.remove();
+                    } else {
+                        iterator.set(getDefinition().getRecipeCapability().withAmount(chemicalIngredient, remaining));
                     }
                 }
             } else if (io == IO.OUT) {
                 while (iterator.hasNext()) {
-                    var chemicalStack = iterator.next();
-                    if (chemicalStack.isEmpty()) {
+                    var chemicalIngredient = iterator.next();
+                    if (getDefinition().getRecipeCapability().isEmptyIngredient(chemicalIngredient)) {
                         iterator.remove();
                         continue;
                     }
-                    var remaining = capability.insertChemical(chemicalStack.copy(), Action.EXECUTE);
-                    if (!chemicalStack.isEmpty()) {
-                        chemicalStack.setAmount(remaining.getAmount());
+                    var output = getDefinition().getRecipeCapability().getDisplayStack(chemicalIngredient);
+                    if (output == null || output.isEmpty()) {
+                        continue;
                     }
-                    if (chemicalStack.isEmpty()) {
+                    var remaining = capability.insertChemical(output.copy(), Action.EXECUTE);
+                    long inserted = output.getAmount() - remaining.getAmount();
+                    long amountLeft = output.getAmount() - inserted;
+                    if (amountLeft <= 0) {
                         iterator.remove();
+                    } else {
+                        iterator.set(getDefinition().getRecipeCapability().withAmount(chemicalIngredient, amountLeft));
                     }
                 }
             }

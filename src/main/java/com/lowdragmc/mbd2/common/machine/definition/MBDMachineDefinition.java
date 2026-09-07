@@ -339,6 +339,13 @@ public class MBDMachineDefinition implements IConfigurable, IPersistedSerializab
         try (var ignored = UIResourceRendererContext.push(rendererResource, false)) {
             var parsedId = ResourceLocation.tryParse(definitionTag.getString("id"));
             id = parsedId == null ? MBD2.id("undefined") : parsedId;
+            // The editor stores the configured fallback name in the definition
+            // tag. Keep this on the definition before runtime/UI instances are
+            // created; otherwise productive loads silently revert to the empty
+            // default even though the project file contains a name.
+            if (definitionTag.contains("displayName")) {
+                displayName = definitionTag.getString("displayName");
+            }
             blockProperties.deserializeNBT(definitionTag.getCompound("blockProperties"));
             itemProperties.deserializeNBT(definitionTag.getCompound("itemProperties"));
             stateMachine.deserializeNBT(definitionTag.getCompound("stateMachine"));
@@ -500,31 +507,38 @@ public class MBDMachineDefinition implements IConfigurable, IPersistedSerializab
      * @return localized component used when the machine has no custom name
      */
     protected Component getMachineName(MBDMachine machine) {
-        return getDisplayNameFallback(block().getName(), block().getDescriptionId());
+        return getDisplayName(block().getName(), block().getDescriptionId());
     }
 
     /**
-     * Uses the editor-provided name only when the normal translation is missing.
+     * Resolves this definition's name from its normal localized component.
+     *
+     * <p>Machine UI templates and machine item stacks both use this method, so a configured display name is consistently
+     * used as the fallback wherever Minecraft requests the machine's name.</p>
      *
      * @param localizedName normal machine name component
      * @param translationKey translation key used to resolve the component
-     * @return localized name, or the configured literal fallback
+     * @return localized name, or the configured fallback
      */
-    protected Component getDisplayNameFallback(Component localizedName, String translationKey) {
+    public Component getDisplayName(Component localizedName, String translationKey) {
         return resolveDisplayNameFallback(localizedName, translationKey, displayName);
     }
 
     /**
      * Resolves a configured display name without requiring a machine definition instance.
      *
+     * <p>{@link Component#translatableWithFallback(String, String, Object...)} performs the missing-translation
+     * check where translation data is actually available. Comparing {@link Component#getString()} with the key is
+     * unreliable because component rendering can preserve or transform an unresolved translation key.</p>
+     *
      * @param localizedName normal machine name component
      * @param translationKey translation key used to resolve the component
      * @param configuredName editor-provided fallback name
-     * @return localized name, or the configured literal fallback
+     * @return localized name, or the configured fallback when the translation key is absent
      */
     static Component resolveDisplayNameFallback(Component localizedName, String translationKey, String configuredName) {
-        if (configuredName != null && !configuredName.isBlank() && localizedName.getString().equals(translationKey)) {
-            return Component.literal(configuredName);
+        if (configuredName != null && !configuredName.isBlank()) {
+            return Component.translatableWithFallback(translationKey, configuredName);
         }
         return localizedName;
     }

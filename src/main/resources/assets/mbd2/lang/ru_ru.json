@@ -68,6 +68,8 @@
     "mbd2.gui.content.chance_0_short": "§cNC§r",
     "mbd2.gui.content.chance_1": "§eШанс: %s§r",
     "mbd2.gui.content.per_tick": "§aПотреблено/произведено за тик§r",
+    "mbd2.gui.content.per_tick_input": "§aПотребляется за тик§r",
+    "mbd2.gui.content.per_tick_output": "§aПроизводится за тик§r",
     "mbd2.gui.content.output_range": "§aМножитель выхода: %sx - %sx§r",
     "mbd2.gui.content.slot_name": "§4Имя слота: %s§r",
     "mbd2.gui.content.ui_name": "§Имя UI: %s§r",
@@ -761,6 +763,10 @@
     "recipe.capability.mek_pigment.name": "Возможность меканизм пигмент",
     "recipe.capability.mek_slurry.name": "Возможность меканизм взвесь",
     "recipe.capability.mek_chemical.type": "Химический тип",
+    "recipe.capability.mek_chemical.ingredient.type": "Тип ингредиента",
+    "recipe.capability.mek_chemical.ingredient.type.chemical": "Химикат",
+    "recipe.capability.mek_chemical.ingredient.type.tag": "Тег",
+    "recipe.capability.mek_chemical.tag": "Тег химиката",
     "recipe.capability.mek_chemical.type.format": "§cХимический тип§r: %s",
     "recipe.capability.mek_chemical.type.gas": "Газ",
     "recipe.capability.mek_chemical.type.infuse_type": "Вливание",
@@ -932,5 +938,10 @@
     "multiblock.catalyst": "§aтребует катализатор§r",
     "config.jade.plugin_mbd2.recipe_logic_provider": "Multiblock2 Recipe Logic Provider",
     "config.jade.plugin_mbd2.multiblock_provider": "Multiblock2 Multiblock Provider",
-    "item.mbd2.mbd_gadgets.multiblock_builder.failure.no_space": "Недостаточно места для размещения всего мультиблока."
+    "mbd2.jade.energy_limits": "%1$s: Макс. приём %2$s FE/t | Макс. извлечение %3$s FE/t",
+    "mbd2.jade.energy_limits.raw": "%1$s: Макс. приём %2$s FE/t | Макс. извлечение %3$s FE/t",
+    "config.jade.plugin_mbd2.energy_storage": "Хранилище энергии Multiblock2",
+    "config.jade.plugin_mbd2.energy_transfer_limits": "Лимиты передачи энергии Multiblock2",
+    "item.mbd2.mbd_gadgets.multiblock_builder.failure.no_space": "Недостаточно места для размещения всего мультиблока.",
+    "block.mbd2.proxy_part_block": "Прокси-деталь многоблочной структуры"
 }

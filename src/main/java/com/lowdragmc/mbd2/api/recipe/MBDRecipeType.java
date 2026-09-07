@@ -789,7 +789,7 @@ public class MBDRecipeType implements RecipeType<MBDRecipe>, ITagSerializable<Co
                     });
                     var tooltips = new ArrayList<Component>();
                     content.appendTooltip(tooltips, cap.supportsOutputRange(content.minOutput, content.maxOutput)
-                            && cap.supportsOutputMultiplier(content.content, content.maxOutput));
+                            && cap.supportsOutputMultiplier(content.content, content.maxOutput), io);
                     if (!tooltips.isEmpty()) {
                         widget.appendHoverTooltips(tooltips);
                     }

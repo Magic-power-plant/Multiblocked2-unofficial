@@ -51,7 +51,7 @@ public class ItemSlotCapabilityTraitDefinition extends SimpleCapabilityTraitDefi
     @NumberRange(range = {1, Integer.MAX_VALUE})
     private int slotSize = 1;
     @Configurable(name = "config.definition.trait.item_slot.slot_limit", tips = "config.definition.trait.item_slot.slot_limit.tooltip")
-    @NumberRange(range = {1, 64})
+    @NumberRange(range = {1, Integer.MAX_VALUE})
     private int slotLimit = 64;
     @Configurable(name = "config.definition.trait.item_slot.filter", subConfigurable = true, tips = "config.definition.trait.item_slot.filter.tooltip")
     private final ItemFilterSettings itemFilterSettings = new ItemFilterSettings();

@@ -58,6 +58,8 @@
     "mbd2.gui.content.chance_0_short": "§cNC§r",
     "mbd2.gui.content.chance_1": "§e確率: %s§r",
     "mbd2.gui.content.per_tick": "§a1ティックあたりの消費/生成量§r",
+    "mbd2.gui.content.per_tick_input": "§a毎ティック消費§r",
+    "mbd2.gui.content.per_tick_output": "§a毎ティック生成§r",
     "mbd2.gui.content.output_range": "§a出力倍率: %sx - %sx§r",
     "mbd2.gui.content.slot_name": "§4スロット名: %s§r",
     "mbd2.gui.content.ui_name": "§UI名: %s§r",
@@ -584,6 +586,10 @@
     "recipe.capability.mek_pigment.name": "メック顔料能力",
     "recipe.capability.mek_slurry.name": "メックスラリー能力",
     "recipe.capability.mek_chemical.type": "化学タイプ",
+    "recipe.capability.mek_chemical.ingredient.type": "材料タイプ",
+    "recipe.capability.mek_chemical.ingredient.type.chemical": "化学物質",
+    "recipe.capability.mek_chemical.ingredient.type.tag": "タグ",
+    "recipe.capability.mek_chemical.tag": "化学物質タグ",
     "recipe.capability.mek_chemical.type.format": "§c化学タイプ§r: %s",
     "recipe.capability.mek_chemical.type.gas": "ガス",
     "recipe.capability.mek_chemical.type.infuse_type": "インフュージョン",
@@ -721,6 +727,11 @@
     "pattern_preview.page": "ページを切り替え",
     "pattern_preview.layer": "レイヤーを切り替え",
     "pattern_preview.formed": "構造形成を切り替え",
-    "item.mbd2.mbd_gadgets.multiblock_builder.failure.no_space": "マルチブロック全体を配置できる空間がありません。"
+    "item.mbd2.mbd_gadgets.multiblock_builder.failure.no_space": "マルチブロック全体を配置できる空間がありません。",
+    "block.mbd2.proxy_part_block": "マルチブロック代理パーツ",
+    "mbd2.jade.energy_limits": "%1$s: 最大受信 %2$s FE/t | 最大送信 %3$s FE/t",
+    "mbd2.jade.energy_limits.raw": "%1$s: 最大受信 %2$s FE/t | 最大送信 %3$s FE/t",
+    "config.jade.plugin_mbd2.energy_storage": "Multiblock2 エネルギー貯蔵",
+    "config.jade.plugin_mbd2.energy_transfer_limits": "Multiblock2 エネルギー転送上限"
 
 }
