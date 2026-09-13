@@ -50,6 +50,7 @@
     "lowdraglib.ItemStackTransferMixin",
     "lowdraglib.ModularUIContainerMixin",
     "lowdraglib.NumberAccessorMixin",
+    "lowdraglib.PersistedParserMixin",
     "lowdraglib.PhantomFluidWidgetMixin",
     "lowdraglib.PhantomSlotWidgetMixin",
     "lowdraglib.PhantomTankWidgetMixin",
