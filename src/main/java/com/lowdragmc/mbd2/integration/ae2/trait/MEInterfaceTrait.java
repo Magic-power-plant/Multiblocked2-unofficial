@@ -3,16 +3,12 @@ package com.lowdragmc.mbd2.integration.ae2.trait;
 import appeng.api.behaviors.GenericInternalInventory;
 import appeng.api.networking.IGridNodeListener;
 import appeng.api.networking.IInWorldGridNodeHost;
-import appeng.api.stacks.AEFluidKey;
-import appeng.api.stacks.AEItemKey;
-import appeng.api.stacks.AEKeyType;
 import appeng.api.storage.MEStorage;
 import appeng.api.util.AECableType;
 import appeng.capabilities.Capabilities;
 import appeng.helpers.InterfaceLogicHost;
 import appeng.me.helpers.IGridConnectedBlockEntity;
-import com.lowdragmc.lowdraglib.misc.FluidStorage;
-import com.lowdragmc.lowdraglib.misc.ItemStackTransfer;
+import appeng.util.ConfigInventory;
 import com.lowdragmc.lowdraglib.misc.ItemTransferList;
 import com.lowdragmc.lowdraglib.side.fluid.FluidStack;
 import com.lowdragmc.lowdraglib.side.fluid.IFluidTransfer;
@@ -20,6 +16,7 @@ import com.lowdragmc.lowdraglib.side.item.IItemTransfer;
 import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib.syncdata.annotation.DropSaved;
 import com.lowdragmc.lowdraglib.syncdata.field.ManagedFieldHolder;
+import com.lowdragmc.mbd2.MBD2;
 import com.lowdragmc.mbd2.api.capability.recipe.IO;
 import com.lowdragmc.mbd2.api.capability.recipe.IRecipeHandlerTrait;
 import com.lowdragmc.mbd2.api.recipe.MBDRecipe;
@@ -33,6 +30,8 @@ import com.lowdragmc.mbd2.common.trait.RecipeHandlerTrait;
 import com.lowdragmc.mbd2.common.trait.RecipeCapabilityTrait;
 import com.lowdragmc.mbd2.common.trait.SimpleCapabilityTrait;
 import com.lowdragmc.mbd2.integration.ae2.MEOutputScheduler;
+import com.lowdragmc.mbd2.integration.ae2.storage.MEInterfaceKeyStorage;
+import com.lowdragmc.mbd2.integration.appmek.AppliedMekanisticsCompat;
 import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.core.Direction;
@@ -70,6 +69,7 @@ public class MEInterfaceTrait extends SimpleCapabilityTrait implements IGridConn
     private final SerializableInterfaceLogic interfaceLogic;
     private final ItemRecipeHandler itemRecipeHandler = new ItemRecipeHandler();
     private final FluidRecipeHandler fluidRecipeHandler = new FluidRecipeHandler();
+    private final List<IRecipeHandlerTrait<?>> recipeHandlers;
 
     private final ManagedGridNodeCap managedGridNodeCap = new ManagedGridNodeCap();
     private final GenericInternalInventoryCap genericInternalInventoryCap = new GenericInternalInventoryCap();
@@ -88,6 +88,14 @@ public class MEInterfaceTrait extends SimpleCapabilityTrait implements IGridConn
         super(machine, definition);
         mainNode = createMainNode();
         interfaceLogic = createLogic();
+        var handlers = new ArrayList<IRecipeHandlerTrait<?>>();
+        handlers.add(itemRecipeHandler);
+        handlers.add(fluidRecipeHandler);
+        if (MBD2.isAppliedMekanisticsLoaded()) {
+            handlers.addAll(AppliedMekanisticsCompat.createRecipeHandlers(this,
+                    () -> new MEInterfaceKeyStorage(interfaceLogic.getStorage()), false));
+        }
+        recipeHandlers = List.copyOf(handlers);
     }
 
     /**
@@ -182,7 +190,7 @@ public class MEInterfaceTrait extends SimpleCapabilityTrait implements IGridConn
 
     @Override
     public List<IRecipeHandlerTrait<?>> getRecipeHandlerTraits() {
-        return List.of(itemRecipeHandler, fluidRecipeHandler);
+        return recipeHandlers;
     }
 
     @Override
@@ -295,20 +303,13 @@ public class MEInterfaceTrait extends SimpleCapabilityTrait implements IGridConn
         /**
          * Builds a detached item-storage snapshot for simulated recipe handling.
          * <p>
-         * Side effect: copies only item-key entries from the AE2 storage into an LDLib transfer. Mutating the returned
-         * transfer does not affect the live AE2 interface.
+         * The snapshot preserves all occupied slots, including fluids and addon keys, so output simulation cannot
+         * mistake a chemical-filled slot for free item storage.
          *
          * @return independent item transfer containing the current item stacks
          */
         protected IItemTransfer getSafeStorage() {
-            var transfer = new ItemStackTransfer(getDefinition().getSlotSize());
-            for (int i = 0; i < transfer.getSlots(); i++) {
-                var stack = interfaceLogic.getStorage().getStack(getItemSlotIndex(i));
-                if (stack != null && stack.what() instanceof AEItemKey itemKey) {
-                    transfer.setStackInSlot(i, itemKey.toStack((int) stack.amount()));
-                }
-            }
-            return transfer;
+            return getStorage(MEInterfaceKeyStorage.copyInventory(interfaceLogic.getStorage()));
         }
 
         /**
@@ -320,9 +321,13 @@ public class MEInterfaceTrait extends SimpleCapabilityTrait implements IGridConn
          * @return item transfer list covering all configured interface slots
          */
         protected IItemTransfer getStorage() {
+            return getStorage(interfaceLogic.getStorage());
+        }
+
+        private IItemTransfer getStorage(ConfigInventory inventory) {
             List<IItemTransfer> transfers = new ArrayList<>();
             for (int i = 0; i < getDefinition().getSlotSize(); i++) {
-                transfers.add(AEInterfaceSlotWidget.createAEItemTransfer(interfaceLogic.getStorage(), getItemSlotIndex(i)));
+                transfers.add(AEInterfaceSlotWidget.createAEItemTransfer(inventory, getItemSlotIndex(i)));
             }
             return new ItemTransferList(transfers);
         }
@@ -433,22 +438,13 @@ public class MEInterfaceTrait extends SimpleCapabilityTrait implements IGridConn
         /**
          * Builds detached fluid-storage snapshots for simulated recipe handling.
          * <p>
-         * Each returned tank mirrors one AE2 fluid-key storage slot. Mutating these tanks does not affect the live AE2
-         * interface.
+         * The snapshot preserves all occupied slots, including items and addon keys. Mutating these tanks does not
+         * affect the live AE2 interface.
          *
          * @return independent fluid transfer list containing the current fluid stacks
          */
         protected List<IFluidTransfer> getSafeStorage() {
-            List<IFluidTransfer> storages = new ArrayList<>();
-            for (int i = 0; i < getDefinition().getSlotSize(); i++) {
-                var transfer = new FluidStorage(interfaceLogic.getStorage().getCapacity(AEKeyType.fluids()));
-                var stack = interfaceLogic.getStorage().getStack(getFluidSlotIndex(i));
-                if (stack != null && stack.what() instanceof AEFluidKey fluidKey) {
-                    transfer.setFluidInTank(0, FluidStack.create(fluidKey.getFluid(), stack.amount(), fluidKey.copyTag()));
-                }
-                storages.add(transfer);
-            }
-            return storages;
+            return getStorage(MEInterfaceKeyStorage.copyInventory(interfaceLogic.getStorage()));
         }
 
         /**
@@ -460,9 +456,13 @@ public class MEInterfaceTrait extends SimpleCapabilityTrait implements IGridConn
          * @return fluid transfer list covering all configured interface slots
          */
         protected List<IFluidTransfer> getStorage() {
+            return getStorage(interfaceLogic.getStorage());
+        }
+
+        private List<IFluidTransfer> getStorage(ConfigInventory inventory) {
             List<IFluidTransfer> storages = new ArrayList<>();
             for (int i = 0; i < getDefinition().getSlotSize(); i++) {
-                storages.add(AEInterfaceSlotWidget.createAEFluidTransfer(interfaceLogic.getStorage(), getFluidSlotIndex(i)));
+                storages.add(AEInterfaceSlotWidget.createAEFluidTransfer(inventory, getFluidSlotIndex(i)));
             }
             return storages;
         }

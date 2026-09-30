@@ -152,7 +152,7 @@ public class AEInterfaceSlotWidget extends WidgetGroup {
             public @NotNull ItemStack getStackInSlot(int slot) {
                 return Optional.ofNullable(inventory.getStack(slotIndex)).map(stack -> {
                     if (stack.what() instanceof AEItemKey itemKey) {
-                        return new ItemStack(itemKey.getItem(), (int) stack.amount());
+                        return itemKey.toStack((int) stack.amount());
                     }
                     return ItemStack.EMPTY;
                 }).orElse(ItemStack.EMPTY);
@@ -180,7 +180,7 @@ public class AEInterfaceSlotWidget extends WidgetGroup {
                 if (!inventory.canExtract() || !(inventory.getKey(slotIndex) instanceof AEItemKey itemKey) || itemKey.getItem() == Items.AIR)
                     return ItemStack.EMPTY;
                 var extracted = inventory.extract(slotIndex, itemKey, amount, simulate ? Actionable.SIMULATE : Actionable.MODULATE);
-                return new ItemStack(itemKey.getItem(), (int) extracted);
+                return itemKey.toStack((int) extracted);
             }
 
             @Override

@@ -130,6 +130,11 @@ public class CreateKineticMachineDefinition extends MBDMachineDefinition {
     @Setter
     @Accessors(chain = true, fluent = true)
     public static class Builder extends MBDMachineDefinition.Builder {
+        @Override public Builder xeiCatalystGroup(String group) { super.xeiCatalystGroup(group); return this; }
+        @Override public Builder xeiCatalystPriority(int priority) { super.xeiCatalystPriority(priority); return this; }
+        @Override public Builder xeiPartTooltip(String text) { super.xeiPartTooltip(text); return this; }
+        @Override public Builder xeiPartTooltipKey(String key) { super.xeiPartTooltipKey(key); return this; }
+        @Override public Builder xeiPartTooltips(java.util.List<net.minecraft.network.chat.Component> lines) { super.xeiPartTooltips(lines); return this; }
         protected ConfigKineticMachineSettings kineticMachineSettings;
 
         protected Builder() {
@@ -148,7 +153,7 @@ public class CreateKineticMachineDefinition extends MBDMachineDefinition {
         }
 
         public CreateKineticMachineDefinition build() {
-            return new CreateKineticMachineDefinition(id, rootState, blockProperties, itemProperties, machineSettings, recipeLogicSettings, partSettings, kineticMachineSettings);
+            return new CreateKineticMachineDefinition(id, rootState, blockProperties, itemProperties, machineSettings, recipeLogicSettings, configuredPartSettings(), kineticMachineSettings);
         }
 
     }

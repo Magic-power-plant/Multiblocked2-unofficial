@@ -2,6 +2,7 @@ package com.lowdragmc.mbd2.core.mixins.lowdraglib;
 
 import com.lowdragmc.lowdraglib.misc.ItemStackTransfer;
 import com.lowdragmc.lowdraglib.side.item.ItemTransferHelper;
+import com.lowdragmc.mbd2.utils.ItemStackTransferLimits;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -15,9 +16,10 @@ import javax.annotation.Nonnull;
 /**
  * Extends LDLib item-transfer storage behavior for oversized virtual stacks.
  *
- * <p>The overwrite set removes vanilla max-stack-size caps from extraction and persistence while
- * still using LDLib's slot limits and change notifications. Serialized stacks keep vanilla's byte
- * count field valid and store the real count in {@code CountInt} for round-tripping.</p>
+ * <p>Slot capacity scales with each item's native stack size, including a native limit of one.
+ * Extraction uses requested item counts. Persistence preserves existing counts without loss,
+ * and mutations still use LDLib's slot limits and change notifications. Serialized stacks keep
+ * vanilla's byte count field valid and store the real count in {@code CountInt} for round-tripping.</p>
  */
 @Mixin(ItemStackTransfer.class)
 public abstract class ItemStackTransferMixin {
@@ -25,7 +27,7 @@ public abstract class ItemStackTransferMixin {
     protected abstract void onLoad();
 
     /**
-     * Extracts the requested amount without clamping to the item's native max stack size.
+     * Extracts the requested item count without applying the storage capacity formula again.
      *
      * @param slot          slot index in the LDLib transfer
      * @param amount        requested item count
@@ -38,7 +40,7 @@ public abstract class ItemStackTransferMixin {
     @Overwrite(remap = false)
     @Nonnull
     public ItemStack extractItem(int slot, int amount, boolean simulate, boolean notifyChanges) {
-        if (amount == 0)
+        if (amount <= 0)
             return ItemStack.EMPTY;
 
         ItemStackTransfer self = (ItemStackTransfer) (Object) this;
@@ -77,18 +79,18 @@ public abstract class ItemStackTransferMixin {
     }
 
     /**
-     * Returns the configured slot limit without clamping to the stack's item limit.
+     * Scales the configured capacity by the candidate item's native stack size, rounding down.
      *
      * @param slot  slot index
      * @param stack stack being inserted
-     * @return non-negative LDLib slot limit
+     * @return non-negative capacity measured in items of the candidate type
      * @author pingsu
-     * @reason Allow LDLib transfers to store oversized stacks when the slot limit permits it.
+     * @reason Apply proportional capacity consistently to machine, recipe and pipe insertion.
      */
     @Overwrite(remap = false)
     protected int getStackLimit(int slot, @Nonnull ItemStack stack) {
         ItemStackTransfer self = (ItemStackTransfer) (Object) this;
-        return Math.max(self.getSlotLimit(slot), 0);
+        return ItemStackTransferLimits.effectiveStackLimit(self.getSlotLimit(slot), stack.getMaxStackSize());
     }
 
     /**

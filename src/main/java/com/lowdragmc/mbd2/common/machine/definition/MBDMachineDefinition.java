@@ -15,6 +15,7 @@ import com.lowdragmc.lowdraglib.jei.JEIPlugin;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.mbd2.MBD2;
+import com.lowdragmc.mbd2.api.pattern.preview.ComponentSnapshots;
 import com.lowdragmc.mbd2.api.blockentity.IMachineBlockEntity;
 import com.lowdragmc.mbd2.api.recipe.MBDRecipeType;
 import com.lowdragmc.mbd2.client.renderer.MBDBESRenderer;
@@ -749,6 +750,56 @@ public class MBDMachineDefinition implements IConfigurable, IPersistedSerializab
         protected ConfigRecipeLogicSettings recipeLogicSettings;
         @Nullable
         protected ConfigPartSettingsFactory partSettings;
+        private java.util.List<Component> xeiPartTooltips;
+
+        public Builder xeiCatalystGroup(String group) {
+            try {
+                getOrCreateRecipeLogicSettings().setXeiCatalystGroup(group);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Machine " + id + ": " + e.getMessage(), e);
+            }
+            return this;
+        }
+
+        public Builder xeiCatalystPriority(int priority) {
+            getOrCreateRecipeLogicSettings().setXeiCatalystPriority(priority);
+            return this;
+        }
+
+        public Builder xeiPartTooltip(String text) {
+            return addXeiPartTooltip(Component.literal(text));
+        }
+
+        public Builder xeiPartTooltipKey(String key) {
+            return addXeiPartTooltip(Component.translatable(key));
+        }
+
+        private Builder addXeiPartTooltip(Component line) {
+            if (xeiPartTooltips == null) xeiPartTooltips = new java.util.ArrayList<>();
+            xeiPartTooltips.add(ComponentSnapshots.copy(line));
+            return this;
+        }
+
+        public Builder xeiPartTooltips(java.util.List<Component> lines) {
+            xeiPartTooltips = lines.stream().map(line -> ComponentSnapshots.copy(line))
+                    .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+            return this;
+        }
+
+        protected ConfigPartSettingsFactory configuredPartSettings() {
+            if (xeiPartTooltips == null) return partSettings;
+            var original = partSettings == null ? (ConfigPartSettingsFactory) () -> ConfigPartSettings.builder().build() : partSettings;
+            var lines = xeiPartTooltips.stream().map(line -> ComponentSnapshots.copy(line)).toList();
+            return () -> {
+                var settings = original.get();
+                settings.setXeiPartTooltips(lines);
+                return settings;
+            };
+        }
+
+        protected boolean hasXeiPartTooltips() {
+            return xeiPartTooltips != null;
+        }
 
         /**
          * Creates an empty machine definition builder.
@@ -805,7 +856,7 @@ public class MBDMachineDefinition implements IConfigurable, IPersistedSerializab
          * @return new machine definition instance
          */
         public MBDMachineDefinition build() {
-            return new MBDMachineDefinition(id, rootState, blockProperties, itemProperties, machineSettings, recipeLogicSettings, partSettings);
+            return new MBDMachineDefinition(id, rootState, blockProperties, itemProperties, machineSettings, recipeLogicSettings, configuredPartSettings());
         }
     }
 }

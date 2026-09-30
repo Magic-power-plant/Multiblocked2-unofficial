@@ -9,6 +9,8 @@ import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.mbd2.common.gui.editor.MachineEditor;
 import com.lowdragmc.mbd2.common.gui.editor.MachineProject;
+import com.lowdragmc.mbd2.common.gui.editor.ValidatedStringConfigurator;
+import com.lowdragmc.mbd2.api.pattern.preview.ComponentSnapshots;
 import com.lowdragmc.mbd2.common.gui.editor.machine.MachineConfigPanel;
 import com.lowdragmc.mbd2.common.trait.CapabilityIO;
 import com.lowdragmc.mbd2.common.trait.ToggleAutoIO;
@@ -19,6 +21,7 @@ import lombok.experimental.Accessors;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -82,6 +85,25 @@ public class ConfigPartSettings implements IToggleConfigurable, IPersistedSerial
     protected final RecipeModifier.RecipeModifiers recipeModifiers = new RecipeModifier.RecipeModifiers();
     @Builder.Default
     protected final List<ProxyCapability> proxyControllerCapabilities = new ArrayList<>();
+    @Builder.Default
+    @Persisted
+    protected List<Component> xeiPartTooltips = new ArrayList<>();
+
+    public List<Component> xeiPartTooltips() {
+        return ComponentSnapshots.copy(xeiPartTooltips);
+    }
+
+    public void setXeiPartTooltips(List<Component> lines) {
+        xeiPartTooltips = lines == null ? new ArrayList<>() : new ArrayList<>(ComponentSnapshots.copy(lines));
+    }
+
+    public static class ConfigPartSettingsBuilder {
+        public ConfigPartSettingsBuilder xeiPartTooltips(List<Component> lines) {
+            this.xeiPartTooltips$value = lines == null ? new ArrayList<>() : new ArrayList<>(ComponentSnapshots.copy(lines));
+            this.xeiPartTooltips$set = true;
+            return this;
+        }
+    }
 
     @Override
     public CompoundTag serializeNBT() {
@@ -97,6 +119,7 @@ public class ConfigPartSettings implements IToggleConfigurable, IPersistedSerial
 
     @Override
     public void deserializeNBT(CompoundTag tag) {
+        xeiPartTooltips = new ArrayList<>();
         IPersistedSerializable.super.deserializeNBT(tag);
         recipeModifiers.deserializeNBT(tag.getList("recipeModifiers", Tag.TAG_COMPOUND));
         proxyControllerCapabilities.clear();
@@ -111,6 +134,22 @@ public class ConfigPartSettings implements IToggleConfigurable, IPersistedSerial
     @Override
     public void buildConfigurator(ConfiguratorGroup father) {
         IToggleConfigurable.super.buildConfigurator(father);
+        var xeiTooltips = new ArrayConfiguratorGroup<>("config.part_settings.xei_part_tooltips", false,
+                this::xeiPartTooltips, (getter, setter) -> new ValidatedStringConfigurator("",
+                        () -> Component.Serializer.toJson(getter.get()), json -> setter.accept(Component.Serializer.fromJson(json)),
+                        "{\"text\":\"\"}", json -> {
+                    try {
+                        return Component.Serializer.fromJson(json) != null;
+                    } catch (RuntimeException ignored) {
+                        return false;
+                    }
+                }), true);
+        xeiTooltips.setTips("config.part_settings.xei_part_tooltips.tooltip");
+        xeiTooltips.setAddDefault(() -> Component.literal(""));
+        xeiTooltips.setOnAdd(line -> xeiPartTooltips.add(ComponentSnapshots.copy(line)));
+        xeiTooltips.setOnRemove(line -> xeiPartTooltips.remove(line));
+        xeiTooltips.setOnUpdate(this::setXeiPartTooltips);
+        father.addConfigurators(xeiTooltips);
         recipeModifiers.buildConfigurator(father);
         var proxyCapabilities = new ArrayConfiguratorGroup<>("config.part_settings.proxy_controller_capabilities", false,
                 () -> proxyControllerCapabilities, (getter, setter) -> {

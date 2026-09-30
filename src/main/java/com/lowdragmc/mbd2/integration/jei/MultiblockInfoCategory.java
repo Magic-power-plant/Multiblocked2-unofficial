@@ -3,6 +3,7 @@ package com.lowdragmc.mbd2.integration.jei;
 import com.lowdragmc.lowdraglib.jei.ModularUIRecipeCategory;
 import com.lowdragmc.lowdraglib.jei.ModularWrapper;
 import com.lowdragmc.mbd2.MBD2;
+import com.lowdragmc.mbd2.client.xei.MultiblockPreviewLayoutMetrics;
 import com.lowdragmc.mbd2.api.pattern.IMultiblockXEI;
 import com.lowdragmc.mbd2.api.registry.MultiblockXEIRegistry;
 import com.lowdragmc.mbd2.common.machine.definition.MultiblockMachineDefinition;
@@ -59,7 +60,7 @@ public class MultiblockInfoCategory extends ModularUIRecipeCategory<MultiblockIn
 
     public MultiblockInfoCategory(IJeiHelpers helpers) {
         IGuiHelper guiHelper = helpers.getGuiHelper();
-        this.background = guiHelper.createBlankDrawable(160, 160);
+        this.background = guiHelper.createBlankDrawable(MultiblockPreviewLayoutMetrics.WIDTH, MultiblockPreviewLayoutMetrics.HEIGHT);
         this.icon = helpers.getGuiHelper().drawableBuilder(MBD2.id("textures/gui/multiblock_info_page.png"), 0, 0, 16, 16).setTextureSize(16, 16).build();
     }
 

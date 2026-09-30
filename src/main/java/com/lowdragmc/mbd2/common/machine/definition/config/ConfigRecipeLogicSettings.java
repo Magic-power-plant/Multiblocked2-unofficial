@@ -6,6 +6,7 @@ import com.lowdragmc.lowdraglib.gui.editor.configurator.ArrayConfiguratorGroup;
 import com.lowdragmc.lowdraglib.gui.editor.configurator.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib.gui.editor.configurator.IToggleConfigurable;
 import com.lowdragmc.lowdraglib.gui.editor.configurator.SearchComponentConfigurator;
+import com.lowdragmc.mbd2.common.gui.editor.ValidatedStringConfigurator;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.mbd2.MBD2;
@@ -80,6 +81,33 @@ public class ConfigRecipeLogicSettings implements IToggleConfigurable, IPersiste
             "config.recipe_logic_settings.always_modify_recipe.tooltip.1"
     })
     protected boolean alwaysModifyRecipe = false;
+    @Builder.Default
+    @Persisted
+    private String xeiCatalystGroup = "";
+    @Builder.Default
+    @Persisted
+    @Configurable(name = "config.recipe_logic_settings.xei_catalyst_priority", tips = "config.recipe_logic_settings.xei_catalyst_priority.tooltip")
+    @NumberRange(range = {Integer.MIN_VALUE, Integer.MAX_VALUE})
+    private int xeiCatalystPriority = 0;
+
+    public void setXeiCatalystGroup(String group) {
+        String normalized = group == null ? "" : group.trim();
+        if (!isValidXeiCatalystGroup(normalized)) {
+            throw new IllegalArgumentException("Invalid XEI catalyst group: " + group);
+        }
+        xeiCatalystGroup = normalized;
+    }
+
+    public static boolean isValidXeiCatalystGroup(String group) {
+        if (group == null || group.isEmpty()) return true;
+        int separator = group.indexOf(':');
+        return separator > 0 && separator < group.length() - 1
+                && separator == group.lastIndexOf(':') && ResourceLocation.tryParse(group) != null;
+    }
+
+    public void setXeiCatalystPriority(int priority) {
+        xeiCatalystPriority = priority;
+    }
 
     /**
      * Resolves the primary configured recipe type from the MBD registry.
@@ -125,6 +153,8 @@ public class ConfigRecipeLogicSettings implements IToggleConfigurable, IPersiste
 
     @Override
     public void deserializeNBT(CompoundTag tag) {
+        xeiCatalystGroup = "";
+        xeiCatalystPriority = 0;
         IPersistedSerializable.super.deserializeNBT(tag);
         migrateLegacyRecipeType(tag);
         syncRecipeTypes();
@@ -183,6 +213,12 @@ public class ConfigRecipeLogicSettings implements IToggleConfigurable, IPersiste
                 .filter(existing -> !existing.equals(type))
                 .toList()));
         father.addConfigurators(recipeTypeGroup);
+
+        var group = new ValidatedStringConfigurator("config.recipe_logic_settings.xei_catalyst_group",
+                this::xeiCatalystGroup, this::setXeiCatalystGroup, "",
+                value -> isValidXeiCatalystGroup(value == null ? "" : value.trim()));
+        group.setTips("config.recipe_logic_settings.xei_catalyst_group.tooltip");
+        father.addConfigurators(group);
 
         recipeModifiers.buildConfigurator(father);
     }

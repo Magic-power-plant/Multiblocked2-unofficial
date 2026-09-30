@@ -8,6 +8,7 @@ import com.lowdragmc.lowdraglib.utils.Size;
 import com.lowdragmc.mbd2.api.recipe.MBDRecipe;
 import com.lowdragmc.mbd2.api.recipe.MBDRecipeType;
 import com.lowdragmc.mbd2.api.registry.MBDRegistries;
+import com.lowdragmc.mbd2.common.xei.XeiCatalystResolver;
 import lombok.Getter;
 import me.shedaniel.rei.api.client.gui.Renderer;
 import me.shedaniel.rei.api.client.registry.category.CategoryRegistry;
@@ -93,10 +94,8 @@ public class MBDRecipeTypeFuelDisplayCategory extends ModularUIDisplayCategory<M
     public static void registerWorkStations(CategoryRegistry registry) {
         for (var mbdRecipeType : MBDRegistries.RECIPE_TYPES) {
             if (mbdRecipeType.isXEIVisible() && mbdRecipeType.isRequireFuelForWorking()) {
-                for (var definition : MBDRegistries.MACHINE_DEFINITIONS) {
-                    if (definition.recipeLogicSettings().isRecipeTypeAllowed(mbdRecipeType) && definition.item() != null) {
-                        registry.addWorkstations(MBDRecipeTypeFuelDisplayCategory.CATEGORIES.apply(mbdRecipeType), EntryStack.of(VanillaEntryTypes.ITEM, definition.item().getDefaultInstance()));
-                    }
+                for (var catalyst : XeiCatalystResolver.resolve(mbdRecipeType, MBDRegistries.MACHINE_DEFINITIONS)) {
+                    registry.addWorkstations(MBDRecipeTypeFuelDisplayCategory.CATEGORIES.apply(mbdRecipeType), EntryStack.of(VanillaEntryTypes.ITEM, catalyst.stack()));
                 }
             }
         }

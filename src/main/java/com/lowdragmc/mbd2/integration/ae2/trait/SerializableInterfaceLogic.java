@@ -8,6 +8,8 @@ import appeng.helpers.InterfaceLogicHost;
 import appeng.util.ConfigInventory;
 import com.lowdragmc.lowdraglib.syncdata.IContentChangeAware;
 import com.lowdragmc.lowdraglib.syncdata.ITagSerializable;
+import com.lowdragmc.mbd2.MBD2;
+import com.lowdragmc.mbd2.integration.appmek.AppliedMekanisticsCompat;
 import com.lowdragmc.mbd2.core.mixins.ae2.InterfaceLogicAccessor;
 import com.lowdragmc.mbd2.integration.ae2.MEOutputScheduler;
 import lombok.Getter;
@@ -104,6 +106,9 @@ public class SerializableInterfaceLogic extends InterfaceLogic implements ITagSe
         inventory.useRegisteredCapacities();
         AEKeyTypes.getAll().forEach(keyType -> inventory.setCapacity(keyType, MAX_INTERFACE_AMOUNT));
         inventory.setCapacity(AEKeyType.fluids(), MAX_FLUID_AMOUNT);
+        if (MBD2.isAppliedMekanisticsLoaded()) {
+            AppliedMekanisticsCompat.extendChemicalCapacity(inventory);
+        }
     }
 
     @Override

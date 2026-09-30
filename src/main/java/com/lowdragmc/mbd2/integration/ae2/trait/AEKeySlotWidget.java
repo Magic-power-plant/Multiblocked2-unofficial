@@ -33,8 +33,11 @@ import com.lowdragmc.lowdraglib.jei.ClickableIngredient;
 import com.lowdragmc.lowdraglib.jei.IngredientIO;
 import com.lowdragmc.lowdraglib.jei.JEIPlugin;
 import com.lowdragmc.lowdraglib.side.fluid.FluidStack;
+import com.lowdragmc.mbd2.MBD2;
+import com.lowdragmc.mbd2.integration.appmek.AppliedMekanisticsCompat;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.emi.emi.api.stack.EmiStack;
+import dev.emi.emi.jemi.JemiStack;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -59,7 +62,7 @@ import java.util.Objects;
 import java.util.function.BiConsumer;
 
 /**
- * LDLib slot widget for displaying and editing AE2 {@link GenericStack} item or fluid keys.
+ * LDLib slot widget for displaying and editing AE2 {@link GenericStack} keys, including addon chemicals.
  */
 @LDLRegister(name = "ae_key_slot", group = "widget.container", modID = "ae2")
 @Accessors(chain = true)
@@ -122,7 +125,7 @@ public class AEKeySlotWidget extends Widget implements IRecipeIngredientSlot, IG
      * Creates an AE key slot bound to an optional config inventory.
      * <p>
      * The slot displays and edits one {@link GenericStack}. Item amounts are limited to {@link Integer#MAX_VALUE};
-     * fluid amounts may use the full {@code long} range supported by AE2. Widget mutation should run on the UI thread or
+     * fluid and supported chemical amounts may use the full {@code long} range supported by AE2. Widget mutation should run on the UI thread or
      * through LDLib client actions.
      *
      * @param inventory backing AE2 config inventory, or {@code null} for display-only/manual stack mode
@@ -730,12 +733,16 @@ public class AEKeySlotWidget extends Widget implements IRecipeIngredientSlot, IG
         if (ingredient instanceof FluidStack fluidStack) {
             return fluidStack.isEmpty() ? null : new GenericStack(AEFluidKey.of(fluidStack.getFluid(), fluidStack.getTag()), fluidStack.getAmount());
         }
+        if (MBD2.isAppliedMekanisticsLoaded()) {
+            var chemical = AppliedMekanisticsCompat.toGenericStack(ingredient);
+            if (chemical != null) return chemical;
+        }
         if (LDLib.isEmiLoaded() && ingredient instanceof EmiStack emiStack) {
             return toGenericStack(emiStack);
         }
         if (LDLib.isJeiLoaded()) {
             if (ingredient instanceof ITypedIngredient<?> typedIngredient) {
-                return appeng.integration.modules.jei.GenericEntryStackHelper.ingredientToStack(typedIngredient);
+                return toGenericStack(typedIngredient.getIngredient());
             }
             return appeng.integration.modules.jei.GenericEntryStackHelper.ingredientToStack(ingredient);
         }
@@ -754,6 +761,14 @@ public class AEKeySlotWidget extends Widget implements IRecipeIngredientSlot, IG
         Fluid fluid = emiStack.getKeyOfType(Fluid.class);
         if (fluid != null) {
             return new GenericStack(AEFluidKey.of(fluid, emiStack.getNbt()), emiStack.getAmount());
+        }
+        if (MBD2.isAppliedMekanisticsLoaded()) {
+            // JEMI may expose a string UID as its key; the chemical and its amount live in the JEI ingredient.
+            if (LDLib.isJeiLoaded() && emiStack instanceof JemiStack<?> jemiStack) {
+                var chemical = AppliedMekanisticsCompat.toGenericStack(jemiStack.ingredient);
+                if (chemical != null) return chemical;
+            }
+            return AppliedMekanisticsCompat.toGenericStack(emiStack.getKey(), emiStack.getAmount());
         }
         return null;
     }
@@ -1032,7 +1047,7 @@ public class AEKeySlotWidget extends Widget implements IRecipeIngredientSlot, IG
         }
         try {
             var amount = Long.parseLong(input.trim());
-            var maxAmount = stack.what() instanceof AEFluidKey ? Long.MAX_VALUE : Integer.MAX_VALUE;
+            var maxAmount = getMaxAmount(stack);
             return amount >= 0 && amount <= maxAmount ? amount : null;
         } catch (NumberFormatException ignored) {
             return null;
@@ -1040,7 +1055,9 @@ public class AEKeySlotWidget extends Widget implements IRecipeIngredientSlot, IG
     }
 
     private static long getMaxAmount(GenericStack stack) {
-        return stack.what() instanceof AEFluidKey ? Long.MAX_VALUE : Integer.MAX_VALUE;
+        return stack.what() instanceof AEFluidKey
+                || (MBD2.isAppliedMekanisticsLoaded() && AppliedMekanisticsCompat.isChemicalKey(stack.what()))
+                ? Long.MAX_VALUE : Integer.MAX_VALUE;
     }
 
     /**

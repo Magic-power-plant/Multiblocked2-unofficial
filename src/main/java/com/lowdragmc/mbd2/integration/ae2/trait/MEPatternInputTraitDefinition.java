@@ -45,6 +45,12 @@ public class MEPatternInputTraitDefinition extends SimpleCapabilityTraitDefiniti
     @NumberRange(range = {1, Long.MAX_VALUE})
     private long fluidInputLimit = Long.MAX_VALUE;
 
+    @Getter
+    @Setter
+    @Configurable(name = "config.definition.trait.ae2_me_pattern_input.chemical_input_limit")
+    @NumberRange(range = {1, Long.MAX_VALUE})
+    private long chemicalInputLimit = Long.MAX_VALUE;
+
     @Override
     public SimpleCapabilityTrait createTrait(MBDMachine machine) {
         return new MEPatternInputTrait(machine, this);

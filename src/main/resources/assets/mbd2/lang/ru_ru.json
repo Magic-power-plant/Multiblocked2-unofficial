@@ -945,5 +945,21 @@
     "config.jade.plugin_mbd2.energy_storage": "Хранилище энергии Multiblock2",
     "config.jade.plugin_mbd2.energy_transfer_limits": "Лимиты передачи энергии Multiblock2",
     "item.mbd2.mbd_gadgets.multiblock_builder.failure.no_space": "Недостаточно места для размещения всего мультиблока.",
-    "block.mbd2.proxy_part_block": "Прокси-деталь многоблочной структуры"
+    "block.mbd2.proxy_part_block": "Прокси-деталь многоблочной структуры",
+    "config.recipe_logic_settings.xei_catalyst_group": "Группа катализаторов XEI",
+    "config.recipe_logic_settings.xei_catalyst_group.tooltip": "Укажите namespace:path: в каждой категории будет одна машина. Остальные участники теряют поиск применений через катализатор. Требуется перезапуск.",
+    "config.recipe_logic_settings.xei_catalyst_priority": "Приоритет катализатора XEI",
+    "config.recipe_logic_settings.xei_catalyst_priority.tooltip": "Большее значение выбирает представителя группы в категории. Требуется перезапуск.",
+    "config.part_settings.xei_part_tooltips": "Описание детали XEI",
+    "config.part_settings.xei_part_tooltips.tooltip": "Только обзор частей мультиблока. Введите Minecraft Component JSON. Неверный ввод выделяется красным; прежнее значение сохраняется.",
+    "pattern_preview.parts_unavailable": "Позиции кандидатов для этой структуры недоступны",
+    "pattern_preview.parts_empty": "В этой структуре нет перечисляемых деталей",
+    "pattern_preview.part_positions": "Позиции кандидатов: %s, сейчас видно: %s",
+    "pattern_preview.parts_not_quantity": "Количество позиций не равно количеству деталей для одновременной установки.",
+    "pattern_preview.parts_hidden": "Переключите слой или вид сформированной структуры для просмотра других позиций.",
+  "pattern_preview.part_layer_limit": "Количество на слой: %s – %s",
+  "pattern_preview.part_constraint_source": "Источник ограничения: %s",
+  "pattern_preview.select_position": "Сначала выберите блок в структуре",
+  "pattern_preview.position_empty": "Для этой позиции нет перечислимых кандидатов",
+  "config.definition.trait.ae2_me_pattern_input.chemical_input_limit": "Лимит ввода химикатов"
 }

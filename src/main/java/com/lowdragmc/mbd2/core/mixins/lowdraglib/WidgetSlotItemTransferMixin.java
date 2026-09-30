@@ -92,7 +92,7 @@ public abstract class WidgetSlotItemTransferMixin {
     }
 
     /**
-     * Reports the smaller of the configured slot limit and the native item limit.
+     * Reports the scaled storage capacity capped at the native item limit.
      *
      * @return effective vanilla interaction limit for the current stack
      * @author pingsu
@@ -109,7 +109,7 @@ public abstract class WidgetSlotItemTransferMixin {
      * Reports the candidate stack's effective limit for insertion and drag-splitting.
      *
      * @param stack candidate insertion stack
-     * @return smaller of the configured slot limit and candidate item's native limit
+     * @return scaled storage capacity capped at the candidate item's native limit
      * @author pingsu
      * @reason Prevent all vanilla insertion paths from exceeding either applicable stack limit.
      */

@@ -7,6 +7,7 @@ import com.lowdragmc.lowdraglib.rei.IGui2Renderer;
 import com.lowdragmc.lowdraglib.rei.ModularDisplay;
 import com.lowdragmc.lowdraglib.rei.ModularUIDisplayCategory;
 import com.lowdragmc.mbd2.MBD2;
+import com.lowdragmc.mbd2.client.xei.MultiblockPreviewLayoutMetrics;
 import com.lowdragmc.mbd2.api.pattern.IMultiblockXEI;
 import com.lowdragmc.mbd2.api.registry.MultiblockXEIRegistry;
 import com.lowdragmc.mbd2.common.machine.definition.MultiblockMachineDefinition;
@@ -85,12 +86,12 @@ public class MultiblockInfoDisplayCategory extends ModularUIDisplayCategory<Mult
 
     @Override
     public int getDisplayHeight() {
-        return 160 + 8;
+        return MultiblockPreviewLayoutMetrics.HEIGHT + 8;
     }
 
     @Override
     public int getDisplayWidth(MultiblockInfoDisplay display) {
-        return 160 + 8;
+        return MultiblockPreviewLayoutMetrics.WIDTH + 8;
     }
 
     @Override

@@ -534,6 +534,11 @@ public class EntityMachineDefinition extends MBDMachineDefinition {
     @Setter
     @Accessors(chain = true, fluent = true)
     public static class Builder extends MBDMachineDefinition.Builder {
+        @Override public Builder xeiCatalystGroup(String group) { super.xeiCatalystGroup(group); return this; }
+        @Override public Builder xeiCatalystPriority(int priority) { super.xeiCatalystPriority(priority); return this; }
+        @Override public Builder xeiPartTooltip(String text) { super.xeiPartTooltip(text); return this; }
+        @Override public Builder xeiPartTooltipKey(String key) { super.xeiPartTooltipKey(key); return this; }
+        @Override public Builder xeiPartTooltips(java.util.List<net.minecraft.network.chat.Component> lines) { super.xeiPartTooltips(lines); return this; }
         private Predicate<TraitDefinition> entityTraitFilter = MBDEntityMachine::isDefaultEntitySafeTrait;
         private EntityKind entityKind = EntityKind.ENTITY;
         private float entityWidth = 0.98f;
@@ -581,6 +586,7 @@ public class EntityMachineDefinition extends MBDMachineDefinition {
          * @return new entity machine definition
          */
         public EntityMachineDefinition build() {
+            if (hasXeiPartTooltips()) throw new IllegalStateException("Entity machine " + id + " does not support part settings");
             var definition = new EntityMachineDefinition(id, rootState, blockProperties, itemProperties, machineSettings, recipeLogicSettings)
                     .entityTraitFilter(entityTraitFilter);
             definition.entityKind = entityKind == null ? EntityKind.ENTITY : entityKind;

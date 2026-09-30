@@ -6,6 +6,7 @@ import com.lowdragmc.lowdraglib.gui.widget.Widget;
 import com.lowdragmc.mbd2.api.recipe.MBDRecipe;
 import com.lowdragmc.mbd2.api.recipe.MBDRecipeType;
 import com.lowdragmc.mbd2.api.registry.MBDRegistries;
+import com.lowdragmc.mbd2.common.xei.XeiCatalystResolver;
 import dev.emi.emi.api.EmiRegistry;
 import dev.emi.emi.api.recipe.EmiRecipeCategory;
 import dev.emi.emi.api.stack.EmiStack;
@@ -67,10 +68,8 @@ public class MBDRecipeTypeFuelEmiCategory extends EmiRecipeCategory {
     public static void registerWorkStations(EmiRegistry registry) {
         for (var mbdRecipeType : MBDRegistries.RECIPE_TYPES) {
             if (mbdRecipeType.isXEIVisible() && mbdRecipeType.isRequireFuelForWorking()) {
-                for (var definition : MBDRegistries.MACHINE_DEFINITIONS) {
-                    if (definition.recipeLogicSettings().isRecipeTypeAllowed(mbdRecipeType) && definition.item() != null) {
-                        registry.addWorkstation(MBDRecipeTypeFuelEmiCategory.CATEGORIES.apply(mbdRecipeType), EmiStack.of(definition.item()));
-                    }
+                for (var catalyst : XeiCatalystResolver.resolve(mbdRecipeType, MBDRegistries.MACHINE_DEFINITIONS)) {
+                    registry.addWorkstation(MBDRecipeTypeFuelEmiCategory.CATEGORIES.apply(mbdRecipeType), EmiStack.of(catalyst.stack()));
                 }
             }
         }

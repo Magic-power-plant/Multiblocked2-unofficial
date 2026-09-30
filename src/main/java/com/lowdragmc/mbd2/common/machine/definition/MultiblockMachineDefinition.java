@@ -528,6 +528,12 @@ public class MultiblockMachineDefinition extends MBDMachineDefinition {
     public static class Builder extends MBDMachineDefinition.Builder {
         protected ConfigMultiblockSettingsFactory multiblockSettings;
 
+        @Override public Builder xeiCatalystGroup(String group) { super.xeiCatalystGroup(group); return this; }
+        @Override public Builder xeiCatalystPriority(int priority) { super.xeiCatalystPriority(priority); return this; }
+        @Override public Builder xeiPartTooltip(String text) { super.xeiPartTooltip(text); return this; }
+        @Override public Builder xeiPartTooltipKey(String key) { super.xeiPartTooltipKey(key); return this; }
+        @Override public Builder xeiPartTooltips(java.util.List<net.minecraft.network.chat.Component> lines) { super.xeiPartTooltips(lines); return this; }
+
         /**
          * Creates an empty multiblock definition builder.
          * <p>
@@ -557,7 +563,7 @@ public class MultiblockMachineDefinition extends MBDMachineDefinition {
          * @return new multiblock definition instance
          */
         public MultiblockMachineDefinition build() {
-            return new MultiblockMachineDefinition(id, rootState, blockProperties, itemProperties, machineSettings, recipeLogicSettings, partSettings, multiblockSettings);
+            return new MultiblockMachineDefinition(id, rootState, blockProperties, itemProperties, machineSettings, recipeLogicSettings, configuredPartSettings(), multiblockSettings);
         }
     }
 }

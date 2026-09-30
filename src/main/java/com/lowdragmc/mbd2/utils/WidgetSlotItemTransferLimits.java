@@ -12,6 +12,6 @@ public final class WidgetSlotItemTransferLimits {
     }
 
     public static int effectiveStackLimit(int slotLimit, int itemLimit) {
-        return Math.min(Math.max(slotLimit, 0), itemLimit);
+        return Math.min(ItemStackTransferLimits.effectiveStackLimit(slotLimit, itemLimit), Math.max(itemLimit, 0));
     }
 }

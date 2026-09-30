@@ -81,6 +81,8 @@ dependencies {
     // Applied Energistics 2
     implementation fg.deobf("appeng:appliedenergistics2-forge:${applied_energistics_version}")
 
+    implementation fg.deobf("curse.maven:applied-mekanistics-574300:7244744")
+
     // Blood Magic
     implementation fg.deobf("curse.maven:blood-magic-${blood_magic_version}")
 

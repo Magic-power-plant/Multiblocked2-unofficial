@@ -132,6 +132,11 @@ public class MBD2 {
         return LDLib.isModLoaded("mekanism");
     }
 
+    /** Guards all references to the optional Applied Mekanistics chemical bridge. */
+    public static boolean isAppliedMekanisticsLoaded() {
+        return isAE2Loaded() && isMekanismLoaded() && LDLib.isModLoaded("appmek");
+    }
+
     /**
      * @return {@code true} when Create is loaded and kinetic machine support may be registered
      */

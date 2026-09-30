@@ -7,6 +7,7 @@ import com.lowdragmc.lowdraglib.jei.ModularWrapper;
 import com.lowdragmc.mbd2.api.recipe.MBDRecipe;
 import com.lowdragmc.mbd2.api.recipe.MBDRecipeType;
 import com.lowdragmc.mbd2.api.registry.MBDRegistries;
+import com.lowdragmc.mbd2.common.xei.XeiCatalystResolver;
 import lombok.Getter;
 import mezz.jei.api.gui.drawable.IDrawable;
 import mezz.jei.api.helpers.IGuiHelper;
@@ -88,10 +89,8 @@ public class MBDRecipeTypeCategory extends ModularUIRecipeCategory<MBDRecipe> {
     public static void registerRecipeCatalysts(IRecipeCatalystRegistration registration) {
         for (var mbdRecipeType : MBDRegistries.RECIPE_TYPES) {
             if (mbdRecipeType.isXEIVisible()) {
-                for (var definition : MBDRegistries.MACHINE_DEFINITIONS) {
-                    if (definition.recipeLogicSettings().isRecipeTypeAllowed(mbdRecipeType) && definition.item() != null) {
-                        registration.addRecipeCatalyst(definition.item().getDefaultInstance(), MBDRecipeTypeCategory.TYPES.apply(mbdRecipeType));
-                    }
+                for (var catalyst : XeiCatalystResolver.resolve(mbdRecipeType, MBDRegistries.MACHINE_DEFINITIONS)) {
+                    registration.addRecipeCatalyst(catalyst.stack(), MBDRecipeTypeCategory.TYPES.apply(mbdRecipeType));
                 }
             }
         }

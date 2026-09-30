@@ -143,6 +143,18 @@ public class ItemSlotCapabilityTrait extends SimpleCapabilityTrait implements IA
             public int getSlotLimit(int slot) {
                 return getDefinition().getSlotLimit();
             }
+
+            @Override
+            public ItemStackTransfer copy() {
+                // LDLib's base copy loses this trait's configured capacity. Recipe
+                // simulation needs the same limits and filter as the real inventory.
+                var copied = createStorage();
+                copied.setSize(getSlots());
+                for (int slot = 0; slot < getSlots(); slot++) {
+                    copied.setStackInSlot(slot, getStackInSlot(slot).copy());
+                }
+                return copied;
+            }
         };
         if (getDefinition().getItemFilterSettings().isEnable()) {
             transfer.setFilter(getDefinition().getItemFilterSettings()::test);
@@ -412,16 +424,13 @@ public class ItemSlotCapabilityTrait extends SimpleCapabilityTrait implements IA
                             }
                         }
                         if (index != -1) {
-                            if (!simulate) {
-                                var output = shuffledItems.get(index);
-                                for (int slot = 0; slot < capability.getSlots(); slot++) {
-                                    ItemStack leftStack = capability.insertItem(slot, output.copy(), true);
-                                    if (leftStack.getCount() < output.getCount()) {
-                                        leftStack = capability.insertItem(slot, output.copy(), false);
-                                        output.setCount(leftStack.getCount());
-                                        if (output.isEmpty()) break;
-                                    }
-                                }
+                            // Also reserve space in the copied inventory during
+                            // simulation, so later outputs cannot reuse these slots.
+                            var output = shuffledItems.get(index);
+                            for (int slot = 0; slot < capability.getSlots(); slot++) {
+                                ItemStack leftStack = capability.insertItem(slot, output.copy(), false);
+                                output.setCount(leftStack.getCount());
+                                if (output.isEmpty()) break;
                             }
                             iterator.remove();
                         }

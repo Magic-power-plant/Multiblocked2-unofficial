@@ -33,6 +33,7 @@ import com.lowdragmc.lowdraglib.syncdata.annotation.DescSynced;
 import com.lowdragmc.lowdraglib.syncdata.annotation.DropSaved;
 import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib.syncdata.field.ManagedFieldHolder;
+import com.lowdragmc.mbd2.MBD2;
 import com.lowdragmc.mbd2.api.capability.recipe.IO;
 import com.lowdragmc.mbd2.api.capability.recipe.IRecipeHandlerTrait;
 import com.lowdragmc.mbd2.api.recipe.MBDRecipe;
@@ -47,6 +48,8 @@ import com.lowdragmc.mbd2.common.trait.RecipeHandlerTrait;
 import com.lowdragmc.mbd2.common.trait.RecipeCapabilityTrait;
 import com.lowdragmc.mbd2.common.trait.SimpleCapabilityTrait;
 import com.lowdragmc.mbd2.common.trait.item.ItemHandlerWrapper;
+import com.lowdragmc.mbd2.integration.ae2.storage.MEPatternKeyStorage;
+import com.lowdragmc.mbd2.integration.appmek.AppliedMekanisticsCompat;
 import lombok.Getter;
 import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;
@@ -76,7 +79,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * AE2 pattern provider trait that accepts pushed crafting inputs into machine-readable item and fluid buffers.
+ * AE2 pattern provider trait that accepts pushed crafting inputs into machine-readable item, fluid and addon-key buffers.
  */
 @Getter
 public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridConnectedBlockEntity, InternalInventoryHost, PatternContainer, ICraftingProvider {
@@ -118,6 +121,10 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
     private final DynamicFluidStorage fluidStorage;
     @DropSaved
     @Persisted
+    @DescSynced
+    private final MEPatternKeyStorage chemicalStorage;
+    @DropSaved
+    @Persisted
     private int recipeGroupSeed = 0;
 
     private final List<IPatternDetails> patterns = new ArrayList<>();
@@ -137,6 +144,7 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
     private final FluidHandlerCap fluidHandlerCap = new FluidHandlerCap();
     private final ItemRecipeHandler itemRecipeHandler = new ItemRecipeHandler();
     private final FluidRecipeHandler fluidRecipeHandler = new FluidRecipeHandler();
+    private final List<IRecipeHandlerTrait<?>> recipeHandlers;
 
     /**
      * Creates a pattern-input trait for a machine definition.
@@ -157,6 +165,16 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
         patternRecipeGroups = new SerializablePatternRecipeGroups();
         itemStorage = createItemStorage();
         fluidStorage = createFluidStorage();
+        chemicalStorage = new MEPatternKeyStorage(getDefinition().getChemicalInputLimit(),
+                key -> MBD2.isAppliedMekanisticsLoaded() && AppliedMekanisticsCompat.isChemicalKey(key));
+        chemicalStorage.setOnContentsChanged(this::onTypedStorageChanged);
+        var handlers = new ArrayList<IRecipeHandlerTrait<?>>();
+        handlers.add(itemRecipeHandler);
+        handlers.add(fluidRecipeHandler);
+        if (MBD2.isAppliedMekanisticsLoaded()) {
+            handlers.addAll(AppliedMekanisticsCompat.createRecipeHandlers(this, () -> chemicalStorage, true));
+        }
+        recipeHandlers = List.copyOf(handlers);
     }
 
     /**
@@ -328,7 +346,7 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
 
     @Override
     public List<IRecipeHandlerTrait<?>> getRecipeHandlerTraits() {
-        return List.of(itemRecipeHandler, fluidRecipeHandler);
+        return recipeHandlers;
     }
 
     private String createNextRecipeGroup() {
@@ -343,7 +361,8 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
     }
 
     private boolean hasStoredRecipeGroup(String recipeGroup) {
-        return itemStorage.getRecipeGroups().contains(recipeGroup) || fluidStorage.getRecipeGroups().contains(recipeGroup);
+        return itemStorage.getRecipeGroups().contains(recipeGroup) || fluidStorage.getRecipeGroups().contains(recipeGroup)
+                || chemicalStorage.getRecipeGroups().contains(recipeGroup);
     }
 
     private String getPatternRecipeGroup(IPatternDetails patternDetails) {
@@ -519,7 +538,7 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
         if (itemStorage.hasStoredInputs()) {
             return true;
         }
-        return fluidStorage.hasStoredInputs();
+        return fluidStorage.hasStoredInputs() || !chemicalStorage.isEmpty();
     }
 
     private void updateBlockingPattern(IPatternDetails patternDetails) {
@@ -539,7 +558,7 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
     }
 
     /**
-     * Ejects all buffered item and fluid inputs into the connected AE2 network.
+     * Ejects all buffered item, fluid and chemical inputs into the connected AE2 network.
      * <p>
      * Side effects: removes successfully inserted inputs from local buffers and may clear or update blocking-pattern
      * state. Nothing is ejected when the node is inactive or has no grid.
@@ -547,7 +566,8 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
      * @return total item-count plus fluid-amount inserted into the network
      */
     public long ejectInputsToNetwork() {
-        return ejectItemsToNetwork() + ejectFluidsToNetwork();
+        return MEPatternKeyStorage.saturatedAdd(
+                MEPatternKeyStorage.saturatedAdd(ejectItemsToNetwork(), ejectFluidsToNetwork()), ejectChemicalsToNetwork());
     }
 
     /**
@@ -572,7 +592,7 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
             var inserted = networkStorage.insert(AEItemKey.of(stack), stack.getCount(), Actionable.MODULATE, actionSource);
             if (inserted > 0) {
                 itemStorage.extractItem(slot, (int) Math.min(inserted, Integer.MAX_VALUE), false);
-                ejected += inserted;
+                ejected = MEPatternKeyStorage.saturatedAdd(ejected, inserted);
             }
         }
         return ejected;
@@ -605,7 +625,7 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
             var inserted = networkStorage.insert(key, stack.getAmount(), Actionable.MODULATE, actionSource);
             if (inserted > 0) {
                 storage.drain(0, stack.copy(inserted), false, true);
-                ejected += inserted;
+                ejected = MEPatternKeyStorage.saturatedAdd(ejected, inserted);
             }
         }
         fluidStorage.removeEmptyStorages();
@@ -613,12 +633,29 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
         return ejected;
     }
 
+    /** Returns buffered chemicals to AE2, retaining any amount the network cannot accept. */
+    public long ejectChemicalsToNetwork() {
+        if (!mainNode.isActive() || getGrid() == null) return 0;
+        var networkStorage = getGrid().getStorageService().getInventory();
+        long ejected = 0;
+        for (var entry : chemicalStorage.getEntries()) {
+            var stack = entry.stack();
+            long inserted = networkStorage.insert(stack.what(), stack.amount(), Actionable.MODULATE, actionSource);
+            if (inserted > 0) {
+                chemicalStorage.extract(stack.what(), inserted, entry.recipeGroup());
+                ejected = MEPatternKeyStorage.saturatedAdd(ejected, inserted);
+            }
+        }
+        return ejected;
+    }
+
     private boolean canAcceptInputs(KeyCounter[] inputHolder, String recipeGroup) {
         var simulatedItems = itemStorage.copy();
         var simulatedFluids = fluidStorage.copy();
+        var simulatedChemicals = chemicalStorage.copy();
         for (var counter : inputHolder) {
             for (var entry : counter) {
-                if (insertTypedStorage(entry.getKey(), entry.getLongValue(), simulatedItems, simulatedFluids, recipeGroup) < entry.getLongValue()) {
+                if (insertTypedStorage(entry.getKey(), entry.getLongValue(), simulatedItems, simulatedFluids, simulatedChemicals, recipeGroup) < entry.getLongValue()) {
                     return false;
                 }
             }
@@ -919,7 +956,7 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
     }
 
     /**
-     * AE-facing input buffer that mirrors pushed generic stacks into typed item and fluid storage.
+     * AE-facing input buffer that routes pushed stacks to item, fluid and chemical storage.
      */
     public class SerializableInputBuffer extends GenericStackInv implements ITagSerializable<CompoundTag>, IContentChangeAware {
         @Getter
@@ -996,6 +1033,7 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
                     }
                 }
             }
+            chemicalStorage.getAvailableStacks(out);
         }
 
         @Override
@@ -1040,7 +1078,9 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
         }
 
         private long insertTypedStorage(AEKey what, long amount, boolean simulate) {
-            return MEPatternInputTrait.this.insertTypedStorage(what, amount, simulate ? itemStorage.copy() : itemStorage, simulate ? fluidStorage.copy() : fluidStorage, currentRecipeGroup);
+            return MEPatternInputTrait.this.insertTypedStorage(what, amount,
+                    simulate ? itemStorage.copy() : itemStorage, simulate ? fluidStorage.copy() : fluidStorage,
+                    simulate ? chemicalStorage.copy() : chemicalStorage, currentRecipeGroup);
         }
 
         /**
@@ -1206,7 +1246,7 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
         }
     }
 
-    private long insertTypedStorage(AEKey what, long amount, DynamicItemStorage itemStorage, DynamicFluidStorage fluidStorage, @Nullable String recipeGroup) {
+    private long insertTypedStorage(AEKey what, long amount, DynamicItemStorage itemStorage, DynamicFluidStorage fluidStorage, MEPatternKeyStorage chemicalStorage, @Nullable String recipeGroup) {
         var normalizedRecipeGroup = RecipeGroup.normalizeOrDefault(recipeGroup);
         if (what instanceof AEItemKey itemKey) {
             var remaining = amount;
@@ -1231,7 +1271,7 @@ public class MEPatternInputTrait extends SimpleCapabilityTrait implements IGridC
             }
             return amount - remaining;
         }
-        return 0;
+        return chemicalStorage.insert(what, amount, normalizedRecipeGroup);
     }
 
     /**

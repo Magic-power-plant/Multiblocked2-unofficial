@@ -20,6 +20,15 @@ class WidgetSlotItemTransferLimitsTest {
     }
 
     @Test
+    void menuInsertionUsesTheSameScaledCapacityAsAutomation() {
+        assertEquals(4, WidgetSlotItemTransferLimits.effectiveStackLimit(16, 16));
+        assertEquals(0, WidgetSlotItemTransferLimits.effectiveStackLimit(63, 1));
+        assertEquals(1, WidgetSlotItemTransferLimits.effectiveStackLimit(64, 1));
+        assertEquals(1, WidgetSlotItemTransferLimits.effectiveStackLimit(640, 1));
+        assertEquals(16, WidgetSlotItemTransferLimits.effectiveStackLimit(640, 16));
+    }
+
+    @Test
     void invalidNegativeSlotLimitAllowsNoInsertion() {
         assertEquals(0, WidgetSlotItemTransferLimits.effectiveStackLimit(-1, 64));
     }

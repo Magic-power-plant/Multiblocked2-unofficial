@@ -10,6 +10,12 @@ import com.lowdragmc.mbd2.MBD2;
 import com.lowdragmc.mbd2.api.blockentity.IMachineBlockEntity;
 import com.lowdragmc.mbd2.api.machine.IMultiController;
 import com.lowdragmc.mbd2.api.pattern.predicates.SimplePredicate;
+import com.lowdragmc.mbd2.api.pattern.preview.PartHighlightIndex;
+import com.lowdragmc.mbd2.api.pattern.preview.PartHighlightSource;
+import com.lowdragmc.mbd2.client.xei.MultiblockPreviewLayoutMetrics;
+import com.lowdragmc.mbd2.client.xei.PartHighlightOverviewWidget;
+import com.lowdragmc.mbd2.client.xei.PartHighlightOverlayRenderer;
+import com.lowdragmc.mbd2.client.xei.PatternPartHighlightSession;
 import com.lowdragmc.mbd2.common.block.MBDMachineBlock;
 import com.lowdragmc.mbd2.common.blockentity.MachineBlockEntity;
 import com.lowdragmc.mbd2.common.machine.definition.MultiblockMachineDefinition;
@@ -60,6 +66,8 @@ import java.util.stream.Stream;
 public class PatternPreviewWidget extends WidgetGroup {
     private boolean isLoaded;
     private static TrackedDummyWorld LEVEL;
+    private static Level previewLevel;
+    private static final Set<PatternPreviewWidget> OPEN_PREVIEWS = Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
     private static BlockPos LAST_POS = new BlockPos(0, 50, 0);
     private final SceneWidget sceneWidget;
     public final MultiblockMachineDefinition controllerDefinition;
@@ -70,6 +78,10 @@ public class PatternPreviewWidget extends WidgetGroup {
     public int layer;
     private final XEIIngredientScrollableWidgetGroup predicatesGroup;
     private final XEIIngredientScrollableWidgetGroup candidatesGroup;
+    private final PatternPartHighlightSession partSession = new PatternPartHighlightSession();
+    private final PartHighlightOverviewWidget partOverview;
+    private final ImageWidget positionStatus;
+    private final java.lang.ref.WeakReference<Level> boundLevel;
     private ButtonWidget pageButton;
 
     /**
@@ -82,7 +94,7 @@ public class PatternPreviewWidget extends WidgetGroup {
      *                             displayed
      */
     protected PatternPreviewWidget(MultiblockMachineDefinition controllerDefinition) {
-        super(0, 0, 160, 160);
+        super(0, 0, MultiblockPreviewLayoutMetrics.WIDTH, MultiblockPreviewLayoutMetrics.HEIGHT);
         setClientSideWidget();
 
         // predicates
@@ -90,13 +102,17 @@ public class PatternPreviewWidget extends WidgetGroup {
                 IngredientIO.INPUT, true));
         predicatesGroup.setYScrollBarWidth(4)
                 .setYBarStyle(null, ColorPattern.T_WHITE.rectTexture().setRadius(2).transform(-0.5f, 0));
+        addWidget(positionStatus = new ImageWidget(5, 10, 16, 16,
+                new ResourceTexture("mbd2:textures/gui/information.png")));
+        positionStatus.setHoverTooltips("pattern_preview.select_position");
 
         // prepare scene
         addWidget(new ImageWidget(26, 7, 106, 106, ResourceBorderTexture.BORDERED_BACKGROUND_INVERSE));
         addWidget(sceneWidget = new SceneWidget(26 + 3, 7 + 3, 106 - 6, 106 - 6, LEVEL)
                 .setOnSelected(this::onPosSelected)
-                .setRenderFacing(false)
+                .setAfterWorldRender(scene -> PartHighlightOverlayRenderer.render(partSession.highlightedPositions()))
                 .setRenderFacing(false));
+        addWidget(partOverview = new PartHighlightOverviewWidget(partSession, controllerDefinition.id()));
         if (ConfigHolder.useVBO) {
             if (!RenderSystem.isOnRenderThread()) {
                 RenderSystem.recordRenderCall(sceneWidget::useCacheBuffer);
@@ -107,6 +123,7 @@ public class PatternPreviewWidget extends WidgetGroup {
 
         // load patterns
         this.controllerDefinition = controllerDefinition;
+        this.boundLevel = new java.lang.ref.WeakReference<>(previewLevel);
         this.layer = -1;
         reloadPatterns();
 
@@ -122,21 +139,21 @@ public class PatternPreviewWidget extends WidgetGroup {
                 new ColorRectTexture(ColorUtils.color(255, 221, 221, 221)),
                 new ColorBorderTexture(-1, ColorUtils.color(255, 73, 73, 73))
         );
-        pageButton = new ButtonWidget(136, 11, 18, 18, new GuiTextureGroup(
+        pageButton = new ButtonWidget(MultiblockPreviewLayoutMetrics.CONTROLS_X, 11, 18, 18, new GuiTextureGroup(
                 buttonTexture,
                 new ItemStackTexture(Items.PAPER),
                 new TextTexture("0", ColorPattern.BLACK.color).setSupplier(() -> Integer.toString(index)).scale(0.8f)
         ), cd -> setPage((index + 1 >= patterns.length) ? 0 : index + 1));
         pageButton.setHoverBorderTexture(-1, -1)
                 .setHoverTooltips("pattern_preview.page");
-        var layerButton = new ButtonWidget(136, 34, 18, 18, new GuiTextureGroup(
+        var layerButton = new ButtonWidget(MultiblockPreviewLayoutMetrics.CONTROLS_X, 34, 18, 18, new GuiTextureGroup(
                 buttonTexture,
                 new ResourceTexture("mbd2:textures/gui/multiblock_info_page_layer.png"),
                 new TextTexture("", ColorPattern.BLACK.color).setSupplier(() -> layer == -1 ? "" : Integer.toString(layer)).scale(0.8f)
         ), cd -> updateLayer());
         layerButton.setHoverBorderTexture(-1, -1)
                 .setHoverTooltips("pattern_preview.layer");
-        var formedButton = new SwitchWidget(136, 57, 18, 18, (cd, pressed) -> onFormedSwitch(pressed))
+        var formedButton = new SwitchWidget(MultiblockPreviewLayoutMetrics.CONTROLS_X, 57, 18, 18, (cd, pressed) -> onFormedSwitch(pressed))
                 .setSupplier(() -> patterns.length > 0 && patterns[index].controllerBase.isFormed())
                 .setTexture(new GuiTextureGroup(buttonTexture, new ResourceTexture("mbd2:textures/gui/multiblock_info_page_unformed.png")),
                         new GuiTextureGroup(buttonTexture, new ResourceTexture("mbd2:textures/gui/multiblock_info_page.png")))
@@ -163,7 +180,7 @@ public class PatternPreviewWidget extends WidgetGroup {
             }
             if (!catalystItems.isEmpty()) {
                 addWidget(new SlotWidget(new CycleItemStackHandler(List.of(catalystItems)), 0,
-                        136, 80, false, false)
+                        MultiblockPreviewLayoutMetrics.CONTROLS_X, 80, false, false)
                         .setIngredientIO(IngredientIO.CATALYST)
                         .setOnAddedTooltips((widget, tooltips) -> {
                             tooltips.add(Component.translatable("config.multiblock_settings.catalyst.tooltip"));
@@ -186,15 +203,18 @@ public class PatternPreviewWidget extends WidgetGroup {
                 IGuiTexture.EMPTY));
 
         // candidates
-        addWidget(candidatesGroup = new XEIIngredientScrollableWidgetGroup(6, 117, 148, 36));
+        addWidget(candidatesGroup = new XEIIngredientScrollableWidgetGroup(6, 117, 174, 36,
+                MultiblockPreviewLayoutMetrics.MATERIAL_COLUMNS, MultiblockPreviewLayoutMetrics.MATERIAL_ROWS, IngredientIO.INPUT));
         candidatesGroup.setYScrollBarWidth(4)
                 .setYBarStyle(null, ColorPattern.T_WHITE.rectTexture().setRadius(2).transform(-0.5f, 0));
 
         // set initial page
         setPage(getPreferredPageIndex());
+        OPEN_PREVIEWS.add(this);
     }
 
     private void reloadPatterns() {
+        partSession.invalidate();
         previewRevision = controllerDefinition.previewRevision();
 
         HashSet<ItemStackKey> drops = new HashSet<>();
@@ -209,6 +229,16 @@ public class PatternPreviewWidget extends WidgetGroup {
     }
 
     private void ensurePatternsFresh() {
+        if (boundLevel.get() != Minecraft.getInstance().level || boundLevel.get() != previewLevel) {
+            partSession.invalidate();
+            patterns = new MBPattern[0];
+            partOverview.reset();
+            clearScene();
+            predicatesGroup.setStacks(Collections.emptyList());
+            candidatesGroup.setStacks(Collections.emptyList());
+            positionStatus.setVisible(false);
+            return;
+        }
         if (previewRevision == controllerDefinition.previewRevision()) return;
         reloadPatterns();
         updatePageButtonVisibility();
@@ -217,9 +247,11 @@ public class PatternPreviewWidget extends WidgetGroup {
         } else {
             index = 0;
             layer = -1;
-            sceneWidget.setRenderedCore(Collections.emptyList(), null);
+            clearScene();
             predicatesGroup.setStacks(Collections.emptyList());
             candidatesGroup.setStacks(Collections.emptyList());
+            partOverview.reset();
+            positionStatus.setVisible(false);
             descriptionWidget.setImage(IGuiTexture.EMPTY);
             descriptionWidget.setHoverTooltips(Collections.emptyList());
         }
@@ -255,18 +287,43 @@ public class PatternPreviewWidget extends WidgetGroup {
     private void setupScene(MBPattern pattern) {
         Stream<BlockPos> stream = pattern.blockMap.keySet().stream()
                 .filter(pos -> layer == -1 || layer + pattern.minY == pos.getY());
+        Set<BlockPos> rendered;
         if (pattern.controllerBase.isFormed()) {
             LongSet set = pattern.controllerBase.getMultiblockState().getMatchContext().getOrDefault("renderMask",
                     LongSets.EMPTY_SET);
             Set<BlockPos> modelDisabled = set.stream().map(BlockPos::of).collect(Collectors.toSet());
-            if (!modelDisabled.isEmpty()) {
-                sceneWidget.setRenderedCore(
-                        stream.filter(pos -> !modelDisabled.contains(pos)).collect(Collectors.toList()), null);
-            } else {
-                sceneWidget.setRenderedCore(stream.toList(), null);
-            }
+            rendered = stream.filter(pos -> !modelDisabled.contains(pos)).collect(Collectors.toSet());
         } else {
-            sceneWidget.setRenderedCore(stream.toList(), null);
+            rendered = stream.collect(Collectors.toSet());
+        }
+        partSession.updateVisiblePositions(rendered);
+        if (Minecraft.getInstance().isSameThread()) {
+            ensureSceneInitialized();
+            sceneWidget.setRenderedCore(rendered, null);
+        }
+    }
+
+    private void ensureSceneInitialized() {
+        // EMI inspects a widget on its reload worker; LDLib deliberately skips
+        // SceneWidget.createScene there. Initialize only when the UI is used.
+        if (sceneWidget.getCore() == null && Minecraft.getInstance().isSameThread()
+                && boundLevel.get() == Minecraft.getInstance().level && boundLevel.get() == previewLevel
+                && LEVEL != null) {
+            sceneWidget.createScene(LEVEL);
+            sceneWidget.setRenderedCore(partSession.visiblePositions(), null);
+        }
+    }
+
+    private void clearScene() {
+        // Metadata-only EMI widgets have no renderer/core, including at logout.
+        if (Minecraft.getInstance().isSameThread() && sceneWidget.getCore() != null) {
+            sceneWidget.setRenderedCore(Collections.emptyList(), null);
+        }
+    }
+
+    private static List<PatternPreviewWidget> previewSnapshot() {
+        synchronized (OPEN_PREVIEWS) {
+            return new ArrayList<>(OPEN_PREVIEWS);
         }
     }
 
@@ -281,14 +338,42 @@ public class PatternPreviewWidget extends WidgetGroup {
      * @throws IllegalStateException when called before a client level exists
      */
     public static PatternPreviewWidget getPatternWidget(MultiblockMachineDefinition controllerDefinition) {
-        if (LEVEL == null) {
-            if (Minecraft.getInstance().level == null) {
+        Level currentLevel = Minecraft.getInstance().level;
+        if (LEVEL == null || currentLevel != previewLevel) {
+            if (currentLevel == null) {
                 MBD2.LOGGER.error("Try to init pattern previews before level load");
                 throw new IllegalStateException();
             }
+            clearPreviewWorld();
             LEVEL = new TrackedDummyWorld();
+            previewLevel = currentLevel;
+            LAST_POS = new BlockPos(0, 50, 0);
         }
         return new PatternPreviewWidget(controllerDefinition);
+    }
+
+    /** Invalidates the shared dummy world after a client disconnect. */
+    public static void clearPreviewWorld() {
+        invalidatePreviewSessions();
+        for (var preview : previewSnapshot()) {
+            preview.patterns = new MBPattern[0];
+            preview.clearScene();
+            preview.predicatesGroup.setStacks(Collections.emptyList());
+            preview.candidatesGroup.setStacks(Collections.emptyList());
+            preview.positionStatus.setVisible(false);
+        }
+        OPEN_PREVIEWS.clear();
+        LEVEL = null;
+        previewLevel = null;
+        LAST_POS = new BlockPos(0, 50, 0);
+    }
+
+    public static void invalidatePreviewSessions() {
+        for (var preview : previewSnapshot()) {
+            preview.partSession.invalidate();
+            preview.partOverview.reset();
+            preview.isLoaded = false;
+        }
     }
 
     /**
@@ -300,10 +385,18 @@ public class PatternPreviewWidget extends WidgetGroup {
      * @param index zero-based preview pattern index
      */
     public void setPage(int index) {
-        if (index >= patterns.length || index < 0) return;
+        if (boundLevel.get() != previewLevel || boundLevel.get() != Minecraft.getInstance().level
+                || index >= patterns.length || index < 0) return;
         this.index = index;
         this.layer = -1;
         MBPattern pattern = patterns[index];
+        partSession.bind(pattern);
+        partOverview.reset();
+        predicatesGroup.setStacks(Collections.emptyList());
+        predicatesGroup.setScrollYOffset(0);
+        positionStatus.setVisible(true);
+        positionStatus.setHoverTooltips("pattern_preview.select_position");
+        candidatesGroup.setScrollYOffset(0);
         setupScene(pattern);
         setupPatternCandidates(pattern);
         setupDescription(pattern);
@@ -360,17 +453,35 @@ public class PatternPreviewWidget extends WidgetGroup {
         IMultiController controllerBase = pattern.controllerBase;
         if (isFormed) {
             this.layer = -1;
-            loadControllerFormed(pattern.blockMap.keySet(), controllerBase);
+            boolean matched = loadControllerFormed(controllerBase);
+            Long2ObjectMap<TraceabilityPredicate> cache = controllerBase.getMultiblockState().getMatchContext().get("predicates");
+            pattern.predicateMap.clear();
+            pattern.highlightIndex = null;
+            pattern.hasMatchedPredicates = matched && cache != null;
+            if (pattern.hasMatchedPredicates && cache != null) {
+                cache.long2ObjectEntrySet().forEach(e -> pattern.predicateMap.put(BlockPos.of(e.getLongKey()), e.getValue()));
+            }
+            partSession.bind(pattern);
+            partOverview.reset();
+            predicatesGroup.setStacks(Collections.emptyList());
+            predicatesGroup.setScrollYOffset(0);
+            positionStatus.setVisible(true);
+            positionStatus.setHoverTooltips("pattern_preview.select_position");
         } else {
-            sceneWidget.setRenderedCore(pattern.blockMap.keySet(), null);
             controllerBase.onStructureInvalid();
         }
+        setupScene(pattern);
     }
 
     private void onPosSelected(BlockPos pos, Direction facing) {
         if (index >= patterns.length || index < 0) return;
         TraceabilityPredicate predicate = patterns[index].predicateMap.get(pos);
-        if (predicate == null) return;
+        if (predicate == null) {
+            predicatesGroup.setStacks(Collections.emptyList());
+            positionStatus.setVisible(true);
+            positionStatus.setHoverTooltips("pattern_preview.position_empty");
+            return;
+        }
         var allPredicates = new ArrayList<SimplePredicate>();
         allPredicates.addAll(predicate.common);
         allPredicates.addAll(predicate.limited);
@@ -385,6 +496,8 @@ public class PatternPreviewWidget extends WidgetGroup {
             }
         }
         setupPredicateCandidates(candidateStacks, simplePredicates, predicate);
+        positionStatus.setVisible(candidateStacks.isEmpty());
+        positionStatus.setHoverTooltips("pattern_preview.position_empty");
     }
 
     /**
@@ -407,6 +520,7 @@ public class PatternPreviewWidget extends WidgetGroup {
     public void updateScreen() {
         ensurePatternsFresh();
         super.updateScreen();
+        if (boundLevel.get() != previewLevel || boundLevel.get() != Minecraft.getInstance().level) return;
         // I can only think of this way
         if (!isLoaded && LDLib.isEmiLoaded() && Minecraft.getInstance().screen instanceof RecipeScreen) {
             setPage(getPreferredPageIndex());
@@ -423,6 +537,10 @@ public class PatternPreviewWidget extends WidgetGroup {
     @Override
     public void drawInBackground(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
         ensurePatternsFresh();
+        ensureSceneInitialized();
+        if (partSession.state() == com.lowdragmc.mbd2.api.pattern.preview.AbstractPartHighlightSession.State.UNBOUND
+                && patterns.length > 0) setPage(getPreferredPageIndex());
+        partOverview.updateHover(mouseX, mouseY);
         RenderSystem.enableBlend();
         super.drawInBackground(graphics, mouseX, mouseY, partialTicks);
     }
@@ -473,16 +591,18 @@ public class PatternPreviewWidget extends WidgetGroup {
         blockDrops.addAll(parts.keySet());
 
         Map<BlockPos, TraceabilityPredicate> predicateMap = new HashMap<>();
+        boolean matched = false;
         if (controllerBase != null) {
-            loadControllerFormed(predicateMap.keySet(), controllerBase);
+            matched = loadControllerFormed(controllerBase);
             Long2ObjectMap<TraceabilityPredicate> cachedPredicates = controllerBase.getMultiblockState()
                     .getMatchContext().get("predicates");
-            if (cachedPredicates != null) {
+            if (matched && cachedPredicates != null) {
                 predicateMap = new HashMap<>(cachedPredicates.size());
                 for (var entry : cachedPredicates.long2ObjectEntrySet()) {
                     predicateMap.put(BlockPos.of(entry.getLongKey()), entry.getValue());
                 }
             }
+            matched &= cachedPredicates != null;
         }
         return controllerBase == null ? null : new MBPattern(blockMap, parts.values().stream().sorted((one, two) -> {
             if (one.isController) return -1;
@@ -492,27 +612,22 @@ public class PatternPreviewWidget extends WidgetGroup {
             if (one.blockId != two.blockId) return two.blockId - one.blockId;
             return two.amount - one.amount;
         }).map(PartInfo::getItemStack).filter(list -> !list.isEmpty()).collect(Collectors.toList()), predicateMap,
-                controllerBase, shapeInfo.getDescription());
+                controllerBase, shapeInfo.getDescription(), matched);
     }
 
-    private void loadControllerFormed(Collection<BlockPos> poses, IMultiController controllerBase) {
+    private boolean loadControllerFormed(IMultiController controllerBase) {
         BlockPattern pattern = controllerBase.getPattern();
         if (pattern != null && pattern.checkPatternAt(controllerBase.getMultiblockState(), true)) {
             controllerBase.onStructureFormed();
-        }
-        if (controllerBase.isFormed()) {
-            LongSet set = controllerBase.getMultiblockState().getMatchContext().getOrDefault("renderMask",
-                    LongSets.EMPTY_SET);
-            Set<BlockPos> modelDisabled = set.stream().map(BlockPos::of).collect(Collectors.toSet());
-            if (!modelDisabled.isEmpty()) {
-                sceneWidget.setRenderedCore(
-                        poses.stream().filter(pos -> !modelDisabled.contains(pos)).collect(Collectors.toList()), null);
-            } else {
-                sceneWidget.setRenderedCore(poses, null);
-            }
         } else {
+            controllerBase.onStructureInvalid();
+            MBD2.LOGGER.warn("Pattern formed checking failed: {}", controllerBase.getBlockState().getBlock().getDescriptionId());
+            return false;
+        }
+        if (!controllerBase.isFormed()) {
             MBD2.LOGGER.warn("Pattern formed checking failed: {}", controllerBase.getBlockState().getBlock().getDescriptionId());
         }
+        return controllerBase.isFormed();
     }
 
     private Map<ItemStackKey, PartInfo> gatherBlockDrops(Map<BlockPos, BlockInfo> blocks) {
@@ -580,7 +695,7 @@ public class PatternPreviewWidget extends WidgetGroup {
      * referenced controller and dummy-world block entities may mutate as preview
      * formation toggles.</p>
      */
-    public static class MBPattern {
+    public static class MBPattern implements PartHighlightSource {
 
         @NotNull
         final List<List<ItemStack>> parts;
@@ -592,6 +707,17 @@ public class PatternPreviewWidget extends WidgetGroup {
         final IMultiController controllerBase;
         final int maxY, minY;
         final List<String> description;
+        private boolean hasMatchedPredicates;
+        private PartHighlightIndex highlightIndex;
+
+        @Override
+        public PartHighlightIndex partHighlightIndex() {
+            if (highlightIndex == null) {
+                highlightIndex = PartHighlightIndex.build(hasMatchedPredicates ? new HashMap<>(predicateMap) : null,
+                        blockMap.keySet(), controllerBase.getPos());
+            }
+            return highlightIndex;
+        }
 
         /**
          * Creates baked preview data and computes vertical bounds.
@@ -607,11 +733,19 @@ public class PatternPreviewWidget extends WidgetGroup {
                          @NotNull Map<BlockPos, TraceabilityPredicate> predicateMap,
                          @NotNull IMultiController controllerBase,
                          @NotNull List<String> description) {
+            this(blockMap, parts, predicateMap, controllerBase, description, !predicateMap.isEmpty());
+        }
+
+        private MBPattern(@NotNull Map<BlockPos, BlockInfo> blockMap, @NotNull List<List<ItemStack>> parts,
+                          @NotNull Map<BlockPos, TraceabilityPredicate> predicateMap,
+                          @NotNull IMultiController controllerBase,
+                          @NotNull List<String> description, boolean hasMatchedPredicates) {
             this.parts = parts;
             this.blockMap = blockMap;
             this.predicateMap = predicateMap;
             this.controllerBase = controllerBase;
             this.description = description;
+            this.hasMatchedPredicates = hasMatchedPredicates;
             int min = Integer.MAX_VALUE, max = Integer.MIN_VALUE;
             for (BlockPos pos : blockMap.keySet()) {
                 min = Math.min(min, pos.getY());

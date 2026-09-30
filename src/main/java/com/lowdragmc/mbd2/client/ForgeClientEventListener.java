@@ -3,6 +3,7 @@ package com.lowdragmc.mbd2.client;
 import com.lowdragmc.mbd2.MBD2;
 import com.lowdragmc.mbd2.client.renderer.MultiblockInWorldPreviewRenderer;
 import com.lowdragmc.mbd2.api.registry.MultiblockXEIRegistry;
+import com.lowdragmc.mbd2.api.pattern.PatternPreviewWidget;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraftforge.api.distmarker.Dist;
@@ -29,6 +30,11 @@ import java.util.List;
 @OnlyIn(Dist.CLIENT)
 public class ForgeClientEventListener {
 
+    @SubscribeEvent
+    public static void onScreenClosing(net.minecraftforge.client.event.ScreenEvent.Closing event) {
+        PatternPreviewWidget.invalidatePreviewSessions();
+    }
+
     /**
      * Drops server-provided XEI pages when leaving a world or server.
      *
@@ -37,6 +43,7 @@ public class ForgeClientEventListener {
     @SubscribeEvent
     public static void onClientLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
         MultiblockXEIRegistry.clearDataPackEntries();
+        PatternPreviewWidget.clearPreviewWorld();
     }
     /**
      * Registers client-only MBD commands.

@@ -734,6 +734,21 @@
     "mbd2.jade.energy_limits": "%1$s: 最大受信 %2$s FE/t | 最大送信 %3$s FE/t",
     "mbd2.jade.energy_limits.raw": "%1$s: 最大受信 %2$s FE/t | 最大送信 %3$s FE/t",
     "config.jade.plugin_mbd2.energy_storage": "Multiblock2 エネルギー貯蔵",
-    "config.jade.plugin_mbd2.energy_transfer_limits": "Multiblock2 エネルギー転送上限"
-
+    "config.jade.plugin_mbd2.energy_transfer_limits": "Multiblock2 エネルギー転送上限",
+    "config.recipe_logic_settings.xei_catalyst_group": "XEI 触媒グループ",
+    "config.recipe_logic_settings.xei_catalyst_group.tooltip": "namespace:path を指定するとカテゴリごとに代表の機械のみ表示します。他のメンバーは触媒による用途検索ができなくなります。再起動後に反映されます。",
+    "config.recipe_logic_settings.xei_catalyst_priority": "XEI 触媒優先度",
+    "config.recipe_logic_settings.xei_catalyst_priority.tooltip": "同じグループとカテゴリ内では値が大きい機械を優先します。再起動後に反映されます。",
+    "config.part_settings.xei_part_tooltips": "XEI パーツの説明",
+    "config.part_settings.xei_part_tooltips.tooltip": "マルチブロック情報の部品欄のみ。Minecraft Component JSON を入力してください。無効な入力は赤く表示され、以前の値を保持します。",
+    "pattern_preview.parts_unavailable": "この構造の候補位置は利用できません",
+    "pattern_preview.parts_empty": "この構造に列挙可能なパーツはありません",
+    "pattern_preview.part_positions": "候補位置: %s、現在表示: %s",
+    "pattern_preview.parts_not_quantity": "候補位置の数は同時に設置できる数ではありません。",
+    "pattern_preview.parts_hidden": "他の位置を見るにはレイヤーか形成表示を切り替えてください。",
+  "pattern_preview.part_layer_limit": "各層の数: %s – %s",
+  "pattern_preview.part_constraint_source": "制約の出典: %s",
+  "pattern_preview.select_position": "最初に構造内のブロックを選択してください",
+  "pattern_preview.position_empty": "この位置には列挙可能な候補がありません",
+  "config.definition.trait.ae2_me_pattern_input.chemical_input_limit": "化学物質入力上限"
 }

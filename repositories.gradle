@@ -25,8 +25,22 @@ repositories {
         }
     } // LazyDFU, Jade
     maven {
+        // Offline mirror for artifacts whose upstream maven cannot be reached by the JVM
+        // (for example behind a DNS/proxy setup that only lets non-Java clients through).
+        // Populated by hand; see local-maven/README.md. Listed first so it wins over the
+        // remote repository below without needing a network round trip.
+        name = "LocalDependencyMirror"
+        url = uri("${rootDir}/local-maven")
+        content {
+            includeGroup "dev.emi"
+            includeGroup "org.spongepowered"
+        }
+    }
+    maven {
+        // EMI moved from maven.terraformersmc.com/releases to repo.sleeping.town; the old
+        // host answers with a 301, which some network setups cannot follow.
         name = "TerraformersMC"
-        url = "https://maven.terraformersmc.com/releases/"
+        url = "https://repo.sleeping.town"
         content {
             includeGroup "com.terraformersmc"
             includeGroup "dev.emi"
