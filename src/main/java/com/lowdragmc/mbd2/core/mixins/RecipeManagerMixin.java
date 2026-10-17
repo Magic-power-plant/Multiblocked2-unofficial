@@ -20,7 +20,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -81,8 +83,16 @@ public abstract class RecipeManagerMixin {
         hasErrors = false;
         var seenByType = new HashMap<RecipeType<?>, Map<ResourceLocation, Recipe<?>>>();
         var recipesByName = new LinkedHashMap<ResourceLocation, Recipe<?>>();
+        var seenRecipes = Collections.newSetFromMap(new IdentityHashMap<Recipe<?>, Boolean>());
 
         for (var loadedRecipe : loadedRecipes) {
+            // Type buckets can alias the same recipe instance. Shallow map copies
+            // retain those references, so flattening must not turn them into ID
+            // conflicts or let an old MBD alias override a newer recipe again.
+            // Distinct objects still go through the normal duplicate-ID policy.
+            if (!seenRecipes.add(loadedRecipe)) {
+                continue;
+            }
             var id = loadedRecipe.getId();
             var recipesForType = seenByType.computeIfAbsent(loadedRecipe.getType(), type -> new HashMap<>());
             var previousForType = recipesForType.put(id, loadedRecipe);
