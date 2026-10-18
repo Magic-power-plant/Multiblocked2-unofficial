@@ -19,7 +19,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -31,7 +30,9 @@ import java.util.Map;
  *
  * <p>The mixin copies the recipe map before handing the registered
  * {@link MBDRecipeType} set to its fixed-point loader, allowing chained proxy
- * recipes to be appended without mutating vanilla's immutable reload table.</p>
+ * recipes to be appended without mutating vanilla's immutable reload table.
+ * Reloaded entries retain their datapack keys, which can differ from the ID
+ * returned by a third-party recipe object.</p>
  */
 @Mixin(RecipeManager.class)
 public abstract class RecipeManagerMixin {
@@ -55,7 +56,7 @@ public abstract class RecipeManagerMixin {
         recipes.forEach((type, recipesByName) -> mutableRecipes.put(type, new HashMap<>(recipesByName)));
         recipes = mutableRecipes;
         MBDRecipeType.onRecipeManagerLoaded(recipes, MBDRegistries.RECIPE_TYPES.values());
-        mbd2$replaceRecipeTables(mbd2$getLoadedRecipes());
+        mbd2$rebuildReloadedRecipeTables();
     }
 
     /**
@@ -72,10 +73,37 @@ public abstract class RecipeManagerMixin {
     }
 
     @Unique
-    private Iterable<Recipe<?>> mbd2$getLoadedRecipes() {
-        var loadedRecipes = new ArrayList<Recipe<?>>();
-        recipes.values().forEach(recipesByName -> loadedRecipes.addAll(recipesByName.values()));
-        return loadedRecipes;
+    private void mbd2$rebuildReloadedRecipeTables() {
+        // apply() keys recipes by their datapack resource locations. Flattening
+        // values and calling getId() can collapse distinct entries when a mod
+        // reports the same ID for multiple recipe objects (e.g. Croparia soak
+        // recipes). Keep both the resource keys and the original type buckets.
+        var recipesByName = new LinkedHashMap<ResourceLocation, Recipe<?>>();
+        recipes.values().forEach(entries -> entries.forEach((id, recipe) -> {
+            var previous = recipesByName.putIfAbsent(id, recipe);
+            if (previous != null && previous != recipe) {
+                var selected = mbd2$selectDuplicateRecipe(id, previous, recipe);
+                if (selected == null) {
+                    throw new IllegalArgumentException("Multiple entries with same key: " + id + "=" + recipe + " and " + previous);
+                }
+                recipesByName.put(id, selected);
+            }
+        }));
+
+        var recipesByType = new HashMap<RecipeType<?>, Map<ResourceLocation, Recipe<?>>>();
+        recipes.forEach((type, entries) -> {
+            var selectedEntries = new HashMap<ResourceLocation, Recipe<?>>();
+            entries.forEach((id, recipe) -> {
+                if (recipesByName.get(id) == recipe) {
+                    selectedEntries.put(id, recipe);
+                }
+            });
+            recipesByType.put(type, selectedEntries);
+        });
+        recipes = ImmutableMap.copyOf(recipesByType);
+        byName = ImmutableMap.copyOf(recipesByName);
+        // Preserve apply()'s error state; only replaceRecipes() starts a fresh
+        // synchronized table and resets hasErrors.
     }
 
     @Unique
