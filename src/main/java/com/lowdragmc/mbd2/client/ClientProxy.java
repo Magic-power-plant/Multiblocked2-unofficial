@@ -3,6 +3,7 @@ package com.lowdragmc.mbd2.client;
 import com.lowdragmc.mbd2.MBD2;
 import com.lowdragmc.mbd2.api.registry.MBDRegistries;
 import com.lowdragmc.mbd2.common.CommonProxy;
+import com.lowdragmc.mbd2.client.renderer.CustomRendererRegistry;
 import com.lowdragmc.mbd2.integration.create.machine.KineticInstanceRenderer;
 import net.createmod.catnip.render.SuperByteBufferCache;
 import net.minecraft.client.renderer.item.ItemProperties;
@@ -12,6 +13,7 @@ import net.minecraftforge.client.event.ModelEvent;
 import net.minecraftforge.client.event.EntityRenderersEvent.RegisterRenderers;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
+import net.minecraftforge.fml.event.lifecycle.FMLLoadCompleteEvent;
 
 /**
  * Client-side bootstrap that extends common registration with renderer,
@@ -68,6 +70,12 @@ public class ClientProxy extends CommonProxy {
     public void clientSetup(final FMLClientSetupEvent e) {
         e.enqueueWork(() -> ItemProperties.register(MBDRegistries.GADGETS_ITEM(), MBD2.id("mode"),
                 (itemStack, clientWorld, entity, seed) -> itemStack.getDamageValue()));
+    }
+
+    /** Registers custom callbacks after all client scripts have loaded, including when KubeJS is absent. */
+    @SubscribeEvent
+    public void registerCustomRenderers(FMLLoadCompleteEvent event) {
+        event.enqueueWork(CustomRendererRegistry::reload);
     }
 
     /**

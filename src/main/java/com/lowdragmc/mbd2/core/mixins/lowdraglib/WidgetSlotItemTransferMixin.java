@@ -92,7 +92,7 @@ public abstract class WidgetSlotItemTransferMixin {
     }
 
     /**
-     * Reports the scaled storage capacity capped at the native item limit.
+     * Reports the backing storage capacity capped at the native item limit.
      *
      * @return effective vanilla interaction limit for the current stack
      * @author pingsu
@@ -102,7 +102,7 @@ public abstract class WidgetSlotItemTransferMixin {
     public int getMaxStackSize() {
         ItemStack current = getItem();
         int itemLimit = current.isEmpty() ? 64 : current.getMaxStackSize();
-        return WidgetSlotItemTransferLimits.effectiveStackLimit(this.itemHandler.getSlotLimit(this.index), itemLimit);
+        return WidgetSlotItemTransferLimits.effectiveStackLimit(this.itemHandler, this.index, itemLimit);
     }
 
     /**
@@ -115,6 +115,6 @@ public abstract class WidgetSlotItemTransferMixin {
      */
     @Overwrite
     public int getMaxStackSize(@Nonnull ItemStack stack) {
-        return WidgetSlotItemTransferLimits.effectiveStackLimit(this.itemHandler.getSlotLimit(this.index), stack.getMaxStackSize());
+        return WidgetSlotItemTransferLimits.effectiveStackLimit(this.itemHandler, this.index, stack.getMaxStackSize());
     }
 }

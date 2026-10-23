@@ -209,7 +209,8 @@ public class MBDBlockRenderer implements IRenderer {
     @Override
     public boolean shouldRender(BlockEntity blockEntity, Vec3 cameraPos) {
         return getMachine(blockEntity)
-                .map(machine -> !machine.isDisableRendering() && Vec3.atCenterOf(blockEntity.getBlockPos()).closerThan(cameraPos, machine.getMachineState().renderingRadius()))
+                .map(machine -> !machine.isDisableRendering() && Vec3.atCenterOf(blockEntity.getBlockPos()).closerThan(cameraPos,
+                        KubeJSRenderer.limitRenderDistance(machine.getRealRenderer(), machine.getMachineState().renderingRadius())))
                 .orElseGet(() -> defaultRenderer.get().shouldRender(blockEntity, cameraPos));
     }
 
